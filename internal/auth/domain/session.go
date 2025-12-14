@@ -3,6 +3,7 @@ package domain
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -13,8 +14,8 @@ type Session struct {
 	SessionToken string
 	IpAddress    string
 	UserAgent    string
-	ExpiresAt    string
-	CreatedAt    string
+	ExpiresAt    time.Time
+	CreatedAt    time.Time
 }
 
 func GenerateSecureToken() (string, error) {

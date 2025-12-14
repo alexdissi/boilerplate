@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 )
 
-//go:generate mockgen -destination=internal/auth/test/mock_user_repository.go -package=test my_project/internal/auth/repository UserRepository
+//go:generate mockgen -destination=../test/mock_user_repository.go -package=test my_project/internal/auth/repository UserRepository
 type UserRepository interface {
 	CreateUser(ctx context.Context, user *domain.UserAuth) (*domain.UserAuth, error)
 	UserExistsByEmail(ctx context.Context, email string) (bool, error)

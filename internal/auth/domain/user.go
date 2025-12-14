@@ -1,14 +1,9 @@
 package domain
 
 import (
-	"regexp"
+	"strings"
 
 	"github.com/google/uuid"
-)
-
-var (
-	emailRegex    = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
-	passwordRegex = regexp.MustCompile(`^[A-Za-z\d@$!%*?&]{8,}$`)
 )
 
 type UserAuth struct {
@@ -27,6 +22,7 @@ func (u *UserAuth) Validate() error {
 		return ErrInvalidUserEmail
 	}
 
+	u.Email = strings.TrimSpace(strings.ToLower(u.Email))
 	if !emailRegex.MatchString(u.Email) {
 		return ErrInvalidUserEmailFormat
 	}
@@ -35,12 +31,15 @@ func (u *UserAuth) Validate() error {
 		return ErrInvalidUserPassword
 	}
 
+	u.FirstName = strings.TrimSpace(u.FirstName)
+	u.LastName = strings.TrimSpace(u.LastName)
+
 	if u.FirstName == "" || u.LastName == "" {
 		return ErrInvalidUserName
 	}
 
-	if len(u.FirstName) < 2 || len(u.FirstName) > 100 ||
-		len(u.LastName) < 2 || len(u.LastName) > 100 {
+	if len(u.FirstName) < MinNameLength || len(u.FirstName) > MaxNameLength ||
+		len(u.LastName) < MinNameLength || len(u.LastName) > MaxNameLength {
 		return ErrInvalidUserNameLength
 	}
 
@@ -52,31 +51,14 @@ func IsValidEmail(email string) bool {
 }
 
 func IsValidPassword(password string) bool {
-	if !passwordRegex.MatchString(password) {
+	if len(password) < MinPasswordLength {
 		return false
 	}
 
-	var (
-		hasLower   = false
-		hasUpper   = false
-		hasDigit   = false
-		hasSpecial = false
-	)
-
-	for _, char := range password {
-		switch {
-		case char >= 'a' && char <= 'z':
-			hasLower = true
-		case char >= 'A' && char <= 'Z':
-			hasUpper = true
-		case char >= '0' && char <= '9':
-			hasDigit = true
-		case char == '@' || char == '$' || char == '!' || char == '%' || char == '*' || char == '?' || char == '&':
-			hasSpecial = true
-		}
-	}
-
-	return hasLower && hasUpper && hasDigit && hasSpecial
+	return passwordHasLowercase.MatchString(password) &&
+		passwordHasUppercase.MatchString(password) &&
+		passwordHasDigit.MatchString(password) &&
+		passwordHasSpecial.MatchString(password)
 }
 
 func GenerateProfilePicture(firstName, lastName string) string {

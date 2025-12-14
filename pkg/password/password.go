@@ -20,8 +20,8 @@ type Argon2Params struct {
 
 var defaultParams = &Argon2Params{
 	Memory:      128 * 1024, // 128MB - sécurisé
-	Iterations:  4,         // 4 itérations - recommandé OWASP
-	Parallelism: 4,         // 4 threads - bon compromis performance/sécurité
+	Iterations:  4,          // 4 itérations - recommandé OWASP
+	Parallelism: 4,          // 4 threads - bon compromis performance/sécurité
 	SaltLength:  16,
 	KeyLength:   32,
 }

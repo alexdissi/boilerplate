@@ -27,7 +27,7 @@ func NewUserService(r repository.UserRepository) UserUsecase {
 
 func (s *UserService) RegisterUser(ctx context.Context, input RegisterUserInput) (RegisterUserOutput, error) {
 	if !domain.IsValidPassword(input.Password) {
-		logger.Error("Password validation failed - invalid format")
+		logger.Error("Password validation failed - format requirements not met")
 		return RegisterUserOutput{}, domain.ErrInvalidUserPasswordFormat
 	}
 
@@ -55,7 +55,7 @@ func (s *UserService) RegisterUser(ctx context.Context, input RegisterUserInput)
 	}
 
 	if err := user.Validate(); err != nil {
-		logger.Error("User validation error for:", input.Email, "Error:", err)
+		logger.Error("User validation error during registration")
 		return RegisterUserOutput{}, err
 	}
 
@@ -75,8 +75,8 @@ func (s *UserService) RegisterUser(ctx context.Context, input RegisterUserInput)
 func (s *UserService) LoginUser(ctx context.Context, input LoginUserInput, userAgent, ipAddress string) (LoginUserOutput, error) {
 	attempts, err := s.cache.Get(input.Email)
 	if err == nil {
-		if attempts.(int) >= 5 {
-			logger.Error("Too many login attempts for:", input.Email)
+		if attempts.(int) >= domain.MaxLoginAttempts {
+			logger.Error("Rate limit exceeded for login attempts")
 			return LoginUserOutput{}, domain.ErrTooManyLoginAttempts
 		}
 	}
@@ -117,12 +117,12 @@ func (s *UserService) LoginUser(ctx context.Context, input LoginUserInput, userA
 		SessionToken: token,
 		IpAddress:    ipAddress,
 		UserAgent:    userAgent,
-		ExpiresAt:    time.Now().Add(domain.SessionDurationMinutes * time.Minute).Format(time.RFC3339),
-		CreatedAt:    time.Now().Format(time.RFC3339),
+		ExpiresAt:    time.Now().Add(domain.SessionDurationMinutes * time.Minute),
+		CreatedAt:    time.Now(),
 	}
 
 	if err := s.repo.CreateSession(ctx, session); err != nil {
-		logger.Error("Failed to store session for user:", user.ID, "error:", err)
+		logger.Error("Failed to store session in database")
 		return LoginUserOutput{}, fmt.Errorf("failed to store session: %w", err)
 	}
 
@@ -136,7 +136,7 @@ func (s *UserService) LoginUser(ctx context.Context, input LoginUserInput, userA
 		},
 		Session: SessionInfo{
 			Token:     session.SessionToken,
-			ExpiresAt: session.ExpiresAt,
+			ExpiresAt: session.ExpiresAt.Format(time.RFC3339),
 		},
 		Message: "Login successful",
 	}, nil
