@@ -24,7 +24,7 @@ func NewAuthHandler(u usecase.UserUsecase) *AuthHandler {
 func (h *AuthHandler) Bind(e *echo.Group) {
 	e.POST("/register", h.RegisterUserHandler)
 	e.POST("/login", h.LoginUserHandler)
-	e.DELETE("/logout", h.LogoutUserHandler)
+	e.POST("/logout", h.LogoutUserHandler)
 }
 
 func (h *AuthHandler) RegisterUserHandler(c echo.Context) error {
@@ -101,7 +101,6 @@ func (h *AuthHandler) LogoutUserHandler(c echo.Context) error {
 	clearCookie := &http.Cookie{
 		Name:     "session_token",
 		Value:    "",
-		Expires:  time.Now().Add(-24 * time.Hour),
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   true,

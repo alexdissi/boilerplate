@@ -150,9 +150,6 @@ func (s *UserService) LogoutUser(ctx context.Context, input LogoutInput) (Logout
 
 	err := s.repo.DeleteSessionByToken(ctx, input.Token)
 	if err != nil {
-		if err == domain.ErrSessionNotFound {
-			return LogoutOutput{Message: "Logged out successfully"}, nil
-		}
 		logger.Error("Failed to delete session during logout")
 		return LogoutOutput{}, fmt.Errorf("failed to logout: %w", err)
 	}
