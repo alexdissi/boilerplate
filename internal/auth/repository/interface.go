@@ -14,4 +14,5 @@ type UserRepository interface {
 	GetUserByEmail(ctx context.Context, email string) (*domain.UserAuth, error)
 	GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.UserAuth, error)
 	CreateSession(ctx context.Context, session *domain.Session) error
+	DeleteSessionByToken(ctx context.Context, token string) error
 }

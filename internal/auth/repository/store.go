@@ -107,3 +107,18 @@ func (s *UserStore) CreateSession(ctx context.Context, session *domain.Session) 
 	)
 	return err
 }
+
+func (s *UserStore) DeleteSessionByToken(ctx context.Context, token string) error {
+	query := `DELETE FROM sessions WHERE session_token = $1`
+
+	commandTag, err := s.db.Pool().Exec(ctx, query, token)
+	if err != nil {
+		return err
+	}
+
+	if commandTag.RowsAffected() == 0 {
+		return domain.ErrSessionNotFound
+	}
+
+	return nil
+}

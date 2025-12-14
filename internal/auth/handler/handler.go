@@ -24,6 +24,7 @@ func NewAuthHandler(u usecase.UserUsecase) *AuthHandler {
 func (h *AuthHandler) Bind(e *echo.Group) {
 	e.POST("/register", h.RegisterUserHandler)
 	e.POST("/login", h.LoginUserHandler)
+	e.DELETE("/logout", h.LogoutUserHandler)
 }
 
 func (h *AuthHandler) RegisterUserHandler(c echo.Context) error {
@@ -77,4 +78,37 @@ func (h *AuthHandler) LoginUserHandler(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, output.User)
+}
+
+func (h *AuthHandler) LogoutUserHandler(c echo.Context) error {
+	cookie, err := c.Cookie("session_token")
+	if err != nil {
+		return c.JSON(http.StatusOK, map[string]string{"message": "Logged out successfully"})
+	}
+
+	token := cookie.Value
+	if token == "" {
+		return c.JSON(http.StatusOK, map[string]string{"message": "Logged out successfully"})
+	}
+
+	ctx := c.Request().Context()
+	result, err := h.usecase.LogoutUser(ctx, usecase.LogoutInput{Token: token})
+	if err != nil {
+		logger.Error("Error during logout:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+	}
+
+	clearCookie := &http.Cookie{
+		Name:     "session_token",
+		Value:    "",
+		Expires:  time.Now().Add(-24 * time.Hour),
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   -1,
+	}
+	c.SetCookie(clearCookie)
+
+	return c.JSON(http.StatusOK, result)
 }
