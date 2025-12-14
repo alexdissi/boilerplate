@@ -37,10 +37,6 @@ type SessionInfo struct {
 	ExpiresAt string `json:"expiresAt,omitempty"`
 }
 
-type LogoutInput struct {
-	Token string `json:"token,omitempty"`
-}
-
 type LogoutOutput struct {
 	Message string `json:"message"`
 }

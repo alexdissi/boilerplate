@@ -92,7 +92,7 @@ func (h *AuthHandler) LogoutUserHandler(c echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
-	result, err := h.usecase.LogoutUser(ctx, usecase.LogoutInput{Token: token})
+	result, err := h.usecase.LogoutUser(ctx, token)
 	if err != nil {
 		logger.Error("Error during logout:", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})

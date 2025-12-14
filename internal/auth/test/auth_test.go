@@ -308,3 +308,38 @@ func TestLoginUser_CreateSessionError(t *testing.T) {
 	assert.Empty(t, result.User.ID)
 	assert.Empty(t, result.Session.Token)
 }
+
+func TestLogoutUser_Success(t *testing.T) {
+	mockRepo, service := setupService(t)
+	defer mockRepo.ctrl.Finish()
+
+	ctx := context.Background()
+	token := "valid_session_token_123"
+
+	mockRepo.EXPECT().
+		DeleteSessionByToken(ctx, token).
+		Return(nil)
+
+	result, err := service.LogoutUser(ctx, token)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Logged out successfully", result.Message)
+}
+
+func TestLogoutUser_SessionNotFound(t *testing.T) {
+	mockRepo, service := setupService(t)
+	defer mockRepo.ctrl.Finish()
+
+	ctx := context.Background()
+	token := "nonexistent_session_token"
+
+	mockRepo.EXPECT().
+		DeleteSessionByToken(ctx, token).
+		Return(domain.ErrSessionNotFound)
+
+	result, err := service.LogoutUser(ctx, token)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to logout")
+	assert.Empty(t, result.Message)
+}

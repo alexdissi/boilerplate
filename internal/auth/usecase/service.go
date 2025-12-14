@@ -142,13 +142,13 @@ func (s *UserService) LoginUser(ctx context.Context, input LoginUserInput, userA
 	}, nil
 }
 
-func (s *UserService) LogoutUser(ctx context.Context, input LogoutInput) (LogoutOutput, error) {
-	if input.Token == "" {
+func (s *UserService) LogoutUser(ctx context.Context, token string) (LogoutOutput, error) {
+	if token == "" {
 		logger.Error("Logout attempted with empty token")
 		return LogoutOutput{}, domain.ErrInvalidCredentials
 	}
 
-	err := s.repo.DeleteSessionByToken(ctx, input.Token)
+	err := s.repo.DeleteSessionByToken(ctx, token)
 	if err != nil {
 		logger.Error("Failed to delete session during logout")
 		return LogoutOutput{}, fmt.Errorf("failed to logout: %w", err)
