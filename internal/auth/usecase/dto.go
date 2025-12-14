@@ -1,8 +1,8 @@
 package usecase
 
 type RegisterUserInput struct {
-	FirstName string `json:"first_name" form:"first_name"`
-	LastName  string `json:"last_name" form:"last_name"`
+	FirstName string `json:"firstName" form:"firstName"`
+	LastName  string `json:"lastName" form:"lastName"`
 	Email     string `json:"email" form:"email"`
 	Password  string `json:"password" form:"password"`
 }
@@ -27,12 +27,20 @@ type LoginUserOutput struct {
 type UserInfo struct {
 	ID             string `json:"id"`
 	Email          string `json:"email"`
-	FirstName      string `json:"first_name"`
-	LastName       string `json:"last_name"`
-	ProfilePicture string `json:"profile_picture"`
+	FirstName      string `json:"firstName"`
+	LastName       string `json:"lastName"`
+	ProfilePicture string `json:"profilePicture"`
 }
 
 type SessionInfo struct {
 	Token     string `json:"token,omitempty"`
-	ExpiresAt string `json:"expires_at,omitempty"`
+	ExpiresAt string `json:"expiresAt,omitempty"`
+}
+
+type LogoutInput struct {
+	Token string `json:"token,omitempty"`
+}
+
+type LogoutOutput struct {
+	Message string `json:"message"`
 }

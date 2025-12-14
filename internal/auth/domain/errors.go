@@ -13,4 +13,5 @@ var (
 	ErrUserAlreadyExists         = errors.New("user with this email already exists")
 	ErrInvalidCredentials        = errors.New("invalid email or password")
 	ErrTooManyLoginAttempts      = errors.New("too many login attempts, please try again later")
+	ErrSessionNotFound           = errors.New("session not found")
 )
