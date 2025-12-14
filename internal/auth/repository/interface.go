@@ -1,0 +1,17 @@
+package repository
+
+import (
+	"context"
+	"my_project/internal/auth/domain"
+
+	"github.com/google/uuid"
+)
+
+//go:generate mockgen -destination=../test/mock_user_repository.go -package=test my_project/internal/auth/repository UserRepository
+type UserRepository interface {
+	CreateUser(ctx context.Context, user *domain.UserAuth) (*domain.UserAuth, error)
+	UserExistsByEmail(ctx context.Context, email string) (bool, error)
+	GetUserByEmail(ctx context.Context, email string) (*domain.UserAuth, error)
+	GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.UserAuth, error)
+	CreateSession(ctx context.Context, session *domain.Session) error
+}
