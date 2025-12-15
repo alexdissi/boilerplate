@@ -85,6 +85,21 @@ func (mr *MockUserRepositoryMockRecorder) DeleteSessionByToken(ctx, token any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSessionByToken", reflect.TypeOf((*MockUserRepository)(nil).DeleteSessionByToken), ctx, token)
 }
 
+// GetSessionByToken mocks base method.
+func (m *MockUserRepository) GetSessionByToken(ctx context.Context, token string) (*domain.Session, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSessionByToken", ctx, token)
+	ret0, _ := ret[0].(*domain.Session)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSessionByToken indicates an expected call of GetSessionByToken.
+func (mr *MockUserRepositoryMockRecorder) GetSessionByToken(ctx, token any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSessionByToken", reflect.TypeOf((*MockUserRepository)(nil).GetSessionByToken), ctx, token)
+}
+
 // GetUserByEmail mocks base method.
 func (m *MockUserRepository) GetUserByEmail(ctx context.Context, email string) (*domain.UserAuth, error) {
 	m.ctrl.T.Helper()
@@ -100,6 +115,21 @@ func (mr *MockUserRepositoryMockRecorder) GetUserByEmail(ctx, email any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserByEmail", reflect.TypeOf((*MockUserRepository)(nil).GetUserByEmail), ctx, email)
 }
 
+// GetUserByGoogleID mocks base method.
+func (m *MockUserRepository) GetUserByGoogleID(ctx context.Context, googleID string) (*domain.UserAuth, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUserByGoogleID", ctx, googleID)
+	ret0, _ := ret[0].(*domain.UserAuth)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetUserByGoogleID indicates an expected call of GetUserByGoogleID.
+func (mr *MockUserRepositoryMockRecorder) GetUserByGoogleID(ctx, googleID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserByGoogleID", reflect.TypeOf((*MockUserRepository)(nil).GetUserByGoogleID), ctx, googleID)
+}
+
 // GetUserByID mocks base method.
 func (m *MockUserRepository) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.UserAuth, error) {
 	m.ctrl.T.Helper()
@@ -113,6 +143,20 @@ func (m *MockUserRepository) GetUserByID(ctx context.Context, userID uuid.UUID) 
 func (mr *MockUserRepositoryMockRecorder) GetUserByID(ctx, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserByID", reflect.TypeOf((*MockUserRepository)(nil).GetUserByID), ctx, userID)
+}
+
+// UpdateGoogleOAuth mocks base method.
+func (m *MockUserRepository) UpdateGoogleOAuth(ctx context.Context, userID uuid.UUID, googleID string, provider domain.OAuthProvider) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateGoogleOAuth", ctx, userID, googleID, provider)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateGoogleOAuth indicates an expected call of UpdateGoogleOAuth.
+func (mr *MockUserRepositoryMockRecorder) UpdateGoogleOAuth(ctx, userID, googleID, provider any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateGoogleOAuth", reflect.TypeOf((*MockUserRepository)(nil).UpdateGoogleOAuth), ctx, userID, googleID, provider)
 }
 
 // UserExistsByEmail mocks base method.

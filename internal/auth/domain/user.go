@@ -15,6 +15,8 @@ type UserAuth struct {
 	ProfilePicture string
 	LastLoginAt    *string
 	IsActive       bool
+	GoogleID       string
+	OAuthProvider  OAuthProvider
 }
 
 func (u *UserAuth) Validate() error {

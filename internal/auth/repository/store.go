@@ -22,11 +22,11 @@ func NewUserStore(db database.Service) UserRepository {
 }
 
 func (s *UserStore) CreateUser(ctx context.Context, user *domain.UserAuth) (*domain.UserAuth, error) {
-	query := `INSERT INTO users (email, password_hash, first_name, last_name, profile_picture)
-			  VALUES ($1, $2, $3, $4, $5)
+	query := `INSERT INTO users (email, password_hash, first_name, last_name, profile_picture, google_id, oauth_provider)
+			  VALUES ($1, $2, $3, $4, $5, $6, $7::oauth_provider)
 			  RETURNING id`
 
-	err := s.db.Pool().QueryRow(ctx, query, user.Email, user.PasswordHash, user.FirstName, user.LastName, user.ProfilePicture).Scan(&user.ID)
+	err := s.db.Pool().QueryRow(ctx, query, user.Email, user.PasswordHash, user.FirstName, user.LastName, user.ProfilePicture, user.GoogleID, user.OAuthProvider).Scan(&user.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func (s *UserStore) GetUserByEmail(ctx context.Context, email string) (*domain.U
 }
 
 func (s *UserStore) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.UserAuth, error) {
-	query := `SELECT id, email, password_hash, first_name, last_name, profile_picture, last_login_at, is_active
+	query := `SELECT id, email, password_hash, first_name, last_name, profile_picture, last_login_at, is_active, google_id, oauth_provider
 			  FROM users WHERE id = $1`
 
 	user := &domain.UserAuth{}
@@ -85,6 +85,8 @@ func (s *UserStore) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.
 		&user.ProfilePicture,
 		&user.LastLoginAt,
 		&user.IsActive,
+		&user.GoogleID,
+		&user.OAuthProvider,
 	)
 	if err != nil {
 		return nil, err
@@ -121,4 +123,56 @@ func (s *UserStore) DeleteSessionByToken(ctx context.Context, token string) erro
 	}
 
 	return nil
+}
+
+func (s *UserStore) GetUserByGoogleID(ctx context.Context, googleID string) (*domain.UserAuth, error) {
+	query := `SELECT id, email, password_hash, first_name, last_name, profile_picture, last_login_at, is_active, google_id, oauth_provider
+			  FROM users WHERE google_id = $1 AND is_active = true`
+
+	user := &domain.UserAuth{}
+	err := s.db.Pool().QueryRow(ctx, query, googleID).Scan(
+		&user.ID,
+		&user.Email,
+		&user.PasswordHash,
+		&user.FirstName,
+		&user.LastName,
+		&user.ProfilePicture,
+		&user.LastLoginAt,
+		&user.IsActive,
+		&user.GoogleID,
+		&user.OAuthProvider,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+func (s *UserStore) GetSessionByToken(ctx context.Context, token string) (*domain.Session, error) {
+	query := `SELECT id, user_id, session_token, ip_address, user_agent, expires_at, created_at
+			  FROM sessions WHERE session_token = $1 AND expires_at > NOW()`
+
+	session := &domain.Session{}
+	err := s.db.Pool().QueryRow(ctx, query, token).Scan(
+		&session.ID,
+		&session.UserID,
+		&session.SessionToken,
+		&session.IpAddress,
+		&session.UserAgent,
+		&session.ExpiresAt,
+		&session.CreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return session, nil
+}
+
+func (s *UserStore) UpdateGoogleOAuth(ctx context.Context, userID uuid.UUID, googleID string, provider domain.OAuthProvider) error {
+	query := `UPDATE users SET google_id = $2, oauth_provider = $3::oauth_provider, updated_at = NOW() WHERE id = $1`
+
+	_, err := s.db.Pool().Exec(ctx, query, userID, googleID, provider)
+	return err
 }
