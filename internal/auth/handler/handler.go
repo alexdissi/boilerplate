@@ -4,6 +4,7 @@ import (
 	"errors"
 	"my_project/internal/auth/domain"
 	"my_project/internal/auth/usecase"
+	"my_project/internal/middleware"
 	"my_project/pkg/logger"
 	"net/http"
 	"time"
@@ -24,7 +25,7 @@ func NewAuthHandler(u usecase.UserUsecase) *AuthHandler {
 func (h *AuthHandler) Bind(e *echo.Group) {
 	e.POST("/register", h.RegisterUserHandler)
 	e.POST("/login", h.LoginUserHandler)
-	e.POST("/logout", h.LogoutUserHandler)
+	e.POST("/logout", h.LogoutUserHandler, middleware.CookieSessionMiddleware())
 }
 
 func (h *AuthHandler) RegisterUserHandler(c echo.Context) error {
@@ -81,13 +82,8 @@ func (h *AuthHandler) LoginUserHandler(c echo.Context) error {
 }
 
 func (h *AuthHandler) LogoutUserHandler(c echo.Context) error {
-	cookie, err := c.Cookie("session_token")
-	if err != nil {
-		return c.JSON(http.StatusOK, map[string]string{"message": "Logged out successfully"})
-	}
-
-	token := cookie.Value
-	if token == "" {
+	token, ok := c.Get("session_token").(string)
+	if !ok || token == "" {
 		return c.JSON(http.StatusOK, map[string]string{"message": "Logged out successfully"})
 	}
 
