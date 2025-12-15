@@ -7,4 +7,5 @@ type UserUsecase interface {
 	LoginUser(ctx context.Context, input LoginUserInput, userAgent, ipAddress string) (LoginUserOutput, error)
 	LogoutUser(ctx context.Context, token string) (LogoutOutput, error)
 	LoginWithGoogle(ctx context.Context, input GoogleAuthInput, userAgent, ipAddress string) (GoogleAuthOutput, error)
+	LoginWithGoogleInfo(ctx context.Context, userInfo *GoogleUserInfo, userAgent, ipAddress string) (GoogleAuthOutput, error)
 }

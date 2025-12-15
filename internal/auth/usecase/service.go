@@ -287,3 +287,43 @@ func (s *UserService) createSessionForExistingUser(ctx context.Context, user *do
 		Message: "Login with Google successful",
 	}, nil
 }
+
+func (s *UserService) LoginWithGoogleInfo(ctx context.Context, googleUser *GoogleUserInfo, userAgent, ipAddress string) (GoogleAuthOutput, error) {
+	if !googleUser.EmailVerified {
+		return GoogleAuthOutput{}, domain.ErrOAuthEmailRequired
+	}
+
+	user, err := s.repo.GetUserByGoogleID(ctx, googleUser.ID)
+	if err == nil {
+		return s.createSessionForExistingUser(ctx, user, userAgent, ipAddress)
+	}
+
+	user, err = s.repo.GetUserByEmail(ctx, googleUser.Email)
+	if err == nil {
+		err = s.repo.UpdateGoogleOAuth(ctx, user.ID, googleUser.ID, domain.AuthProviderGoogle)
+		if err != nil {
+			logger.Error("Failed to link Google account:", err)
+			return GoogleAuthOutput{}, fmt.Errorf("failed to link Google account: %w", err)
+		}
+		logger.Info("Google account linked to existing user", "email", googleUser.Email)
+		return s.createSessionForExistingUser(ctx, user, userAgent, ipAddress)
+	}
+
+	newUser := &domain.UserAuth{
+		Email:          googleUser.Email,
+		FirstName:      googleUser.FirstName,
+		LastName:       googleUser.LastName,
+		ProfilePicture: googleUser.Picture,
+		GoogleID:       googleUser.ID,
+		OAuthProvider:  domain.AuthProviderGoogle,
+		IsActive:       true,
+	}
+
+	createdUser, err := s.repo.CreateUser(ctx, newUser)
+	if err != nil {
+		logger.Error("Failed to create Google user:", err)
+		return GoogleAuthOutput{}, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	return s.createSessionForExistingUser(ctx, createdUser, userAgent, ipAddress)
+}
