@@ -4,6 +4,7 @@ import (
 	"my_project/internal/auth/handler"
 	"my_project/internal/auth/repository"
 	"my_project/internal/auth/usecase"
+	sessionMiddleware "my_project/internal/middleware"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -38,6 +39,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 		},
 	}))
 	e.Use(middleware.BodyLimit("2MB"))
+	sessionMiddleware.InitSessionMiddleware(s.db.Pool())
 
 	e.GET("/", s.HelloWorldHandler)
 
