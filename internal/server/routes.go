@@ -67,7 +67,9 @@ func (s *Server) setupAuthRoutes(apiGroup *echo.Group) {
 	userStore := repository.NewUserStore(s.db)
 	authUsecase := usecase.NewUserService(userStore)
 	authHandler := handler.NewAuthHandler(authUsecase)
+	oauthHandler := handler.NewOAuthHandler(authUsecase)
 
 	authGroup := apiGroup.Group("/auth")
 	authHandler.Bind(authGroup)
+	oauthHandler.Bind(authGroup)
 }

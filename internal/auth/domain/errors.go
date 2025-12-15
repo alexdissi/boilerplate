@@ -14,4 +14,7 @@ var (
 	ErrInvalidCredentials        = errors.New("invalid email or password")
 	ErrTooManyLoginAttempts      = errors.New("too many login attempts, please try again later")
 	ErrSessionNotFound           = errors.New("session not found")
+	ErrOAuthTokenInvalid         = errors.New("invalid OAuth token")
+	ErrOAuthUserNotFound         = errors.New("user not found with OAuth provider")
+	ErrOAuthEmailRequired        = errors.New("email is required from OAuth provider")
 )

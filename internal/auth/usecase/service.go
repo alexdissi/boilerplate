@@ -2,7 +2,11 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"time"
 
 	"my_project/internal/auth/domain"
@@ -155,4 +159,131 @@ func (s *UserService) LogoutUser(ctx context.Context, token string) (LogoutOutpu
 	}
 
 	return LogoutOutput{Message: "Logged out successfully"}, nil
+}
+
+func (s *UserService) LoginWithGoogle(ctx context.Context, input GoogleAuthInput, userAgent, ipAddress string) (GoogleAuthOutput, error) {
+	googleUser, err := s.getGoogleUserInfo(input.AccessToken)
+	if err != nil {
+		logger.Error("Failed to get Google user info:", err)
+		return GoogleAuthOutput{}, domain.ErrOAuthTokenInvalid
+	}
+
+	if !googleUser.EmailVerified {
+		return GoogleAuthOutput{}, domain.ErrOAuthEmailRequired
+	}
+
+	// Check if user already exists with this Google ID
+	user, err := s.repo.GetUserByGoogleID(ctx, googleUser.ID)
+	if err == nil {
+		return s.createSessionForExistingUser(ctx, user, userAgent, ipAddress)
+	}
+
+	// Check if user exists with this email but no Google OAuth yet
+	user, err = s.repo.GetUserByEmail(ctx, googleUser.Email)
+	if err == nil {
+		err = s.repo.UpdateGoogleOAuth(ctx, user.ID, googleUser.ID, domain.AuthProviderGoogle)
+		if err != nil {
+			logger.Error("Failed to link Google account:", err)
+			return GoogleAuthOutput{}, fmt.Errorf("failed to link Google account: %w", err)
+		}
+		logger.Info("Google account linked to existing user", "email", googleUser.Email)
+		return s.createSessionForExistingUser(ctx, user, userAgent, ipAddress)
+	}
+
+	newUser := &domain.UserAuth{
+		Email:          googleUser.Email,
+		FirstName:      googleUser.FirstName,
+		LastName:       googleUser.LastName,
+		ProfilePicture: googleUser.Picture,
+		GoogleID:       googleUser.ID,
+		OAuthProvider:  domain.AuthProviderGoogle,
+		IsActive:       true,
+	}
+
+	createdUser, err := s.repo.CreateUser(ctx, newUser)
+	if err != nil {
+		logger.Error("Failed to create Google user:", err)
+		return GoogleAuthOutput{}, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	return s.createSessionForExistingUser(ctx, createdUser, userAgent, ipAddress)
+}
+
+func (s *UserService) getGoogleUserInfo(accessToken string) (*GoogleUserInfo, error) {
+	req, err := http.NewRequest("GET", "https://www.googleapis.com/oauth2/v2/userinfo", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, domain.ErrOAuthTokenInvalid
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var googleUser GoogleUserInfo
+	err = json.Unmarshal(body, &googleUser)
+	if err != nil {
+		return nil, err
+	}
+
+	if googleUser.FirstName == "" && googleUser.LastName == "" && googleUser.Name != "" {
+		parts := strings.Fields(googleUser.Name)
+		if len(parts) >= 1 {
+			googleUser.FirstName = parts[0]
+		}
+		if len(parts) >= 2 {
+			googleUser.LastName = strings.Join(parts[1:], " ")
+		}
+	}
+
+	return &googleUser, nil
+}
+
+func (s *UserService) createSessionForExistingUser(ctx context.Context, user *domain.UserAuth, userAgent, ipAddress string) (GoogleAuthOutput, error) {
+	token, err := domain.GenerateSecureToken()
+	if err != nil {
+		return GoogleAuthOutput{}, fmt.Errorf("failed to generate session token: %w", err)
+	}
+
+	session := &domain.Session{
+		UserID:       user.ID,
+		SessionToken: token,
+		IpAddress:    ipAddress,
+		UserAgent:    userAgent,
+		ExpiresAt:    time.Now().Add(domain.SessionDurationMinutes * time.Minute),
+		CreatedAt:    time.Now(),
+	}
+
+	if err := s.repo.CreateSession(ctx, session); err != nil {
+		logger.Error("Failed to store session for Google user:", err)
+		return GoogleAuthOutput{}, fmt.Errorf("failed to store session: %w", err)
+	}
+
+	return GoogleAuthOutput{
+		User: UserInfo{
+			ID:             user.ID.String(),
+			Email:          user.Email,
+			FirstName:      user.FirstName,
+			LastName:       user.LastName,
+			ProfilePicture: user.ProfilePicture,
+		},
+		Session: SessionInfo{
+			Token:     session.SessionToken,
+			ExpiresAt: session.ExpiresAt.Format(time.RFC3339),
+		},
+		Message: "Login with Google successful",
+	}, nil
 }

@@ -15,4 +15,7 @@ type UserRepository interface {
 	GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.UserAuth, error)
 	CreateSession(ctx context.Context, session *domain.Session) error
 	DeleteSessionByToken(ctx context.Context, token string) error
+	GetSessionByToken(ctx context.Context, token string) (*domain.Session, error)
+	GetUserByGoogleID(ctx context.Context, googleID string) (*domain.UserAuth, error)
+	UpdateGoogleOAuth(ctx context.Context, userID uuid.UUID, googleID string, provider domain.OAuthProvider) error
 }
