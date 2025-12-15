@@ -23,7 +23,7 @@ func NewUserStore(db database.Service) UserRepository {
 
 func (s *UserStore) CreateUser(ctx context.Context, user *domain.UserAuth) (*domain.UserAuth, error) {
 	query := `INSERT INTO users (email, password_hash, first_name, last_name, profile_picture, google_id, oauth_provider)
-			  VALUES ($1, $2, $3, $4, $5, $6, $7)
+			  VALUES ($1, $2, $3, $4, $5, $6, $7::oauth_provider)
 			  RETURNING id`
 
 	err := s.db.Pool().QueryRow(ctx, query, user.Email, user.PasswordHash, user.FirstName, user.LastName, user.ProfilePicture, user.GoogleID, user.OAuthProvider).Scan(&user.ID)
@@ -171,7 +171,7 @@ func (s *UserStore) GetSessionByToken(ctx context.Context, token string) (*domai
 }
 
 func (s *UserStore) UpdateGoogleOAuth(ctx context.Context, userID uuid.UUID, googleID string, provider domain.OAuthProvider) error {
-	query := `UPDATE users SET google_id = $2, oauth_provider = $3, updated_at = NOW() WHERE id = $1`
+	query := `UPDATE users SET google_id = $2, oauth_provider = $3::oauth_provider, updated_at = NOW() WHERE id = $1`
 
 	_, err := s.db.Pool().Exec(ctx, query, userID, googleID, provider)
 	return err
