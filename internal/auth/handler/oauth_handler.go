@@ -5,14 +5,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"my_project/internal/auth/domain"
-	"my_project/internal/auth/usecase"
-	"my_project/pkg/logger"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"my_project/internal/auth/domain"
+	"my_project/internal/auth/usecase"
+	"my_project/pkg/logger"
 
 	"github.com/labstack/echo/v4"
 )
@@ -22,38 +22,36 @@ type OAuthHandler struct {
 }
 
 func NewOAuthHandler(u usecase.UserUsecase) *OAuthHandler {
-	return &OAuthHandler{
-		usecase: u,
-	}
+	return &OAuthHandler{usecase: u}
 }
 
 func (h *OAuthHandler) Bind(e *echo.Group) {
-	// Google OAuth routes
-	e.GET("/google", h.GoogleAuthURLHandler)
-	e.GET("/google/callback", h.GoogleCallbackHandler)
+	e.GET("/google", h.GoogleAuthURL)
+	e.GET("/google/callback", h.GoogleCallback)
 }
 
-func (h *OAuthHandler) GoogleAuthURLHandler(c echo.Context) error {
-	stateBytes := make([]byte, 32)
-	if _, err := rand.Read(stateBytes); err != nil {
-		logger.Error("Failed to generate state parameter:", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to generate OAuth state"})
-	}
-
-	state := base64.URLEncoding.EncodeToString(stateBytes)
-
+func (h *OAuthHandler) GoogleAuthURL(c echo.Context) error {
 	clientID := os.Getenv("GOOGLE_CLIENT_ID")
 	if clientID == "" {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Google OAuth not configured"})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "OAuth not configured"})
 	}
 
-	redirectURI := fmt.Sprintf("%s/auth/google/callback", "http://localhost:8080") // TODO: make configurable
-	authURL := fmt.Sprintf(
-		"https://accounts.google.com/o/oauth2/v2/auth?client_id=%s&redirect_uri=%s&response_type=code&scope=email%%20profile&state=%s",
-		clientID,
-		redirectURI,
-		state,
-	)
+	b := make([]byte, 32)
+	rand.Read(b)
+	state := base64.URLEncoding.EncodeToString(b)
+
+	redirectURI := "http://localhost:8080/auth/google/callback"
+	if uri := os.Getenv("GOOGLE_REDIRECT_URI"); uri != "" {
+		redirectURI = uri
+	}
+
+	authURL := "https://accounts.google.com/o/oauth2/v2/auth?" + strings.Join([]string{
+		"client_id=" + clientID,
+		"redirect_uri=" + redirectURI,
+		"response_type=code",
+		"scope=email profile",
+		"state=" + state,
+	}, "&")
 
 	return c.JSON(http.StatusOK, map[string]string{
 		"auth_url": authURL,
@@ -61,94 +59,68 @@ func (h *OAuthHandler) GoogleAuthURLHandler(c echo.Context) error {
 	})
 }
 
-func (h *OAuthHandler) GoogleCallbackHandler(c echo.Context) error {
+func (h *OAuthHandler) GoogleCallback(c echo.Context) error {
 	code := c.QueryParam("code")
-
 	if code == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Authorization code is required"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Authorization code required"})
 	}
 
-	token, err := h.exchangeCodeForToken(code)
-	if err != nil {
-		logger.Error("Failed to exchange code for token:", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to exchange authorization code"})
-	}
-
-	// Get user info with access token
-	ctx := c.Request().Context()
-	userAgent := c.Request().UserAgent()
-	ipAddress := c.RealIP()
-
-	input := usecase.GoogleAuthInput{
-		AccessToken: token.AccessToken,
-		IDToken:     "", // We could also get ID token if needed
-	}
-
-	output, err := h.usecase.LoginWithGoogle(ctx, input, userAgent, ipAddress)
-	if err != nil {
-		switch {
-		case errors.Is(err, domain.ErrOAuthTokenInvalid):
-			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid Google token"})
-		case errors.Is(err, domain.ErrOAuthEmailRequired):
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Email is required from Google"})
-		default:
-			logger.Error("Unexpected error in GoogleCallbackHandler:", err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
-		}
-	}
-
-	// Set session cookie
-	if output.Session.Token != "" {
-		cookie := &http.Cookie{
-			Name:     "session_token",
-			Value:    output.Session.Token,
-			Expires:  time.Now().Add(domain.SessionDurationMinutes * time.Minute),
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteStrictMode,
-		}
-		c.SetCookie(cookie)
-	}
-
-	// Redirect to frontend with success
-	// Or return JSON if it's an API flow
-	return c.JSON(http.StatusOK, output)
-}
-
-func (h *OAuthHandler) exchangeCodeForToken(code string) (*usecase.GoogleTokenResponse, error) {
 	clientID := os.Getenv("GOOGLE_CLIENT_ID")
 	clientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
-	redirectURI := "http://localhost:8080/auth/google/callback" // TODO: make configurable
-
-	if clientID == "" || clientSecret == "" {
-		return nil, errors.New("Google OAuth not configured")
+	redirectURI := "http://localhost:8080/auth/google/callback"
+	if uri := os.Getenv("GOOGLE_REDIRECT_URI"); uri != "" {
+		redirectURI = uri
 	}
 
-	// Exchange code for token
-	tokenURL := "https://oauth2.googleapis.com/token"
-	data := fmt.Sprintf(
-		"code=%s&client_id=%s&client_secret=%s&redirect_uri=%s&grant_type=authorization_code",
-		code,
-		clientID,
-		clientSecret,
-		redirectURI,
-	)
+	data := strings.Join([]string{
+		"code=" + code,
+		"client_id=" + clientID,
+		"client_secret=" + clientSecret,
+		"redirect_uri=" + redirectURI,
+		"grant_type=authorization_code",
+	}, "&")
 
-	resp, err := http.Post(tokenURL, "application/x-www-form-urlencoded", strings.NewReader(data))
+	resp, err := http.Post("https://oauth2.googleapis.com/token", "application/x-www-form-urlencoded", strings.NewReader(data))
 	if err != nil {
-		return nil, err
+		logger.Error("Token exchange failed:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Token exchange failed"})
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("token exchange failed")
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Token exchange failed"})
 	}
 
-	var tokenResp usecase.GoogleTokenResponse
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-		return nil, err
+	var token usecase.GoogleTokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&token); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Token decode failed"})
 	}
 
-	return &tokenResp, nil
+	ctx := c.Request().Context()
+	input := usecase.GoogleAuthInput{AccessToken: token.AccessToken}
+
+	output, err := h.usecase.LoginWithGoogle(ctx, input, c.Request().UserAgent(), c.RealIP())
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrOAuthTokenInvalid):
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid token"})
+		case errors.Is(err, domain.ErrOAuthEmailRequired):
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Email required"})
+		default:
+			logger.Error("OAuth error:", err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "OAuth failed"})
+		}
+	}
+
+	c.SetCookie(&http.Cookie{
+		Name:     "session_token",
+		Value:    output.Session.Token,
+		Expires:  time.Now().Add(domain.SessionDurationMinutes * time.Minute),
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+	})
+
+	return c.JSON(http.StatusOK, output)
 }
