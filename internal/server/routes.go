@@ -66,7 +66,7 @@ func (s *Server) healthHandler(c echo.Context) error {
 func (s *Server) setupAuthRoutes(apiGroup *echo.Group) {
 	userStore := repository.NewUserStore(s.db)
 	authUsecase := usecase.NewUserService(userStore)
-	authHandler := handler.NewAuthHandler(authUsecase)
+	authHandler := handler.NewAuthHandler(authUsecase, s.mailer)
 	oauthHandler := handler.NewOAuthHandler(authUsecase)
 
 	authGroup := apiGroup.Group("/auth")

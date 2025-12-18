@@ -56,6 +56,7 @@ func (s *UserService) RegisterUser(ctx context.Context, input RegisterUserInput)
 		FirstName:      input.FirstName,
 		LastName:       input.LastName,
 		ProfilePicture: domain.GenerateProfilePicture(input.FirstName, input.LastName),
+		OAuthProvider:  domain.AuthProviderEmail,
 	}
 
 	if err := user.Validate(); err != nil {
@@ -70,9 +71,11 @@ func (s *UserService) RegisterUser(ctx context.Context, input RegisterUserInput)
 	}
 
 	return RegisterUserOutput{
-		ID:      createdUser.ID.String(),
-		Email:   createdUser.Email,
-		Message: "User created successfully",
+		ID:        createdUser.ID.String(),
+		Email:     createdUser.Email,
+		FirstName: createdUser.FirstName,
+		LastName:  createdUser.LastName,
+		Message:   "User created successfully",
 	}, nil
 }
 
