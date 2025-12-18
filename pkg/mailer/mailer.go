@@ -14,7 +14,7 @@ func NewResendMailer(apiKey string, from string) Mailer {
 	return &resendMailer{client: client, from: from}
 }
 
-func (r *resendMailer) SendMail(to string, id string, data map[string]interface{}) error {
+func (r *resendMailer) SendMail(to string, id string, data map[string]any) error {
 	params := &resend.SendEmailRequest{
 		From: r.from,
 		To:   []string{to},
