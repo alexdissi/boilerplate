@@ -8,11 +8,9 @@ type RegisterUserInput struct {
 }
 
 type RegisterUserOutput struct {
-	ID        string `json:"id"`
-	Email     string `json:"email"`
-	FirstName string `json:"firstName"`
-	LastName  string `json:"lastName"`
-	Message   string `json:"message"`
+	ID      string `json:"id"`
+	Email   string `json:"email"`
+	Message string `json:"message"`
 }
 
 type LoginUserInput struct {
@@ -40,5 +38,22 @@ type SessionInfo struct {
 }
 
 type LogoutOutput struct {
+	Message string `json:"message"`
+}
+
+type ForgotPasswordInput struct {
+	Email string `json:"email" form:"email"`
+}
+
+type ForgotPasswordOutput struct {
+	Message string `json:"message"`
+}
+
+type ResetPasswordInput struct {
+	Token    string `json:"token" form:"token"`
+	Password string `json:"password" form:"password"`
+}
+
+type ResetPasswordOutput struct {
 	Message string `json:"message"`
 }

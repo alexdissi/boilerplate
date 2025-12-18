@@ -13,6 +13,7 @@ import (
 	context "context"
 	domain "my_project/internal/auth/domain"
 	reflect "reflect"
+	time "time"
 
 	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
@@ -143,6 +144,49 @@ func (m *MockUserRepository) GetUserByID(ctx context.Context, userID uuid.UUID) 
 func (mr *MockUserRepositoryMockRecorder) GetUserByID(ctx, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserByID", reflect.TypeOf((*MockUserRepository)(nil).GetUserByID), ctx, userID)
+}
+
+// GetUserByResetToken mocks base method.
+func (m *MockUserRepository) GetUserByResetToken(ctx context.Context, token string) (*domain.UserAuth, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUserByResetToken", ctx, token)
+	ret0, _ := ret[0].(*domain.UserAuth)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetUserByResetToken indicates an expected call of GetUserByResetToken.
+func (mr *MockUserRepositoryMockRecorder) GetUserByResetToken(ctx, token any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserByResetToken", reflect.TypeOf((*MockUserRepository)(nil).GetUserByResetToken), ctx, token)
+}
+
+// ResetPassword mocks base method.
+func (m *MockUserRepository) ResetPassword(ctx context.Context, userID uuid.UUID, newPasswordHash string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResetPassword", ctx, userID, newPasswordHash)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ResetPassword indicates an expected call of ResetPassword.
+func (mr *MockUserRepositoryMockRecorder) ResetPassword(ctx, userID, newPasswordHash any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetPassword", reflect.TypeOf((*MockUserRepository)(nil).ResetPassword), ctx, userID, newPasswordHash)
+}
+
+// SetResetPasswordToken mocks base method.
+func (m *MockUserRepository) SetResetPasswordToken(ctx context.Context, email, token string, expiresAt time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetResetPasswordToken", ctx, email, token, expiresAt)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetResetPasswordToken indicates an expected call of SetResetPasswordToken.
+func (mr *MockUserRepositoryMockRecorder) SetResetPasswordToken(ctx, email, token, expiresAt any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetResetPasswordToken", reflect.TypeOf((*MockUserRepository)(nil).SetResetPasswordToken), ctx, email, token, expiresAt)
 }
 
 // UpdateGoogleOAuth mocks base method.

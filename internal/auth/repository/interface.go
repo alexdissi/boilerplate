@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 	"my_project/internal/auth/domain"
 
 	"github.com/google/uuid"
@@ -18,4 +19,7 @@ type UserRepository interface {
 	GetSessionByToken(ctx context.Context, token string) (*domain.Session, error)
 	GetUserByGoogleID(ctx context.Context, googleID string) (*domain.UserAuth, error)
 	UpdateGoogleOAuth(ctx context.Context, userID uuid.UUID, googleID string, provider domain.OAuthProvider) error
+	SetResetPasswordToken(ctx context.Context, email, token string, expiresAt time.Time) error
+	GetUserByResetToken(ctx context.Context, token string) (*domain.UserAuth, error)
+	ResetPassword(ctx context.Context, userID uuid.UUID, newPasswordHash string) error
 }
