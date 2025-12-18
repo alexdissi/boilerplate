@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"my_project/internal/auth/domain"
 	"my_project/internal/database"
@@ -174,5 +175,49 @@ func (s *UserStore) UpdateGoogleOAuth(ctx context.Context, userID uuid.UUID, goo
 	query := `UPDATE users SET google_id = $2, oauth_provider = $3::oauth_provider, updated_at = NOW() WHERE id = $1`
 
 	_, err := s.db.Pool().Exec(ctx, query, userID, googleID, provider)
+	return err
+}
+
+func (s *UserStore) SetResetPasswordToken(ctx context.Context, email, token string, expiresAt time.Time) error {
+	query := `UPDATE users SET reset_password_token = $2, reset_password_expires_at = $3,
+			  is_resetting_password = true, updated_at = NOW()
+			  WHERE email = $1`
+
+	_, err := s.db.Pool().Exec(ctx, query, email, token, expiresAt)
+	return err
+}
+
+func (s *UserStore) GetUserByResetToken(ctx context.Context, token string) (*domain.UserAuth, error) {
+	query := `SELECT id, email, password_hash, first_name, last_name, profile_picture, last_login_at, is_active
+			  FROM users
+			  WHERE reset_password_token = $1
+			  AND reset_password_expires_at > NOW()
+			  AND is_resetting_password = true`
+
+	user := &domain.UserAuth{}
+	err := s.db.Pool().QueryRow(ctx, query, token).Scan(
+		&user.ID,
+		&user.Email,
+		&user.PasswordHash,
+		&user.FirstName,
+		&user.LastName,
+		&user.ProfilePicture,
+		&user.LastLoginAt,
+		&user.IsActive,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+func (s *UserStore) ResetPassword(ctx context.Context, userID uuid.UUID, newPasswordHash string) error {
+	query := `UPDATE users SET password_hash = $2, reset_password_token = NULL,
+			  reset_password_expires_at = NULL, is_resetting_password = false,
+			  updated_at = NOW()
+			  WHERE id = $1`
+
+	_, err := s.db.Pool().Exec(ctx, query, userID, newPasswordHash)
 	return err
 }

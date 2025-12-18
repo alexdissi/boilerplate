@@ -6,7 +6,6 @@ import (
 	"my_project/internal/auth/usecase"
 	"my_project/internal/middleware"
 	"my_project/pkg/logger"
-	"my_project/pkg/mailer"
 	"net/http"
 	"time"
 
@@ -15,13 +14,11 @@ import (
 
 type AuthHandler struct {
 	usecase usecase.UserUsecase
-	mailer  mailer.Mailer
 }
 
-func NewAuthHandler(u usecase.UserUsecase, m mailer.Mailer) *AuthHandler {
+func NewAuthHandler(u usecase.UserUsecase) *AuthHandler {
 	return &AuthHandler{
 		usecase: u,
-		mailer:  m,
 	}
 }
 
@@ -29,6 +26,8 @@ func (h *AuthHandler) Bind(e *echo.Group) {
 	e.POST("/register", h.RegisterUserHandler)
 	e.POST("/login", h.LoginUserHandler)
 	e.POST("/logout", h.LogoutUserHandler, middleware.CookieSessionMiddleware())
+	e.POST("/forgot-password", h.ForgotPasswordHandler)
+	e.POST("/reset-password", h.ResetPasswordHandler)
 }
 
 func (h *AuthHandler) RegisterUserHandler(c echo.Context) error {
@@ -42,16 +41,6 @@ func (h *AuthHandler) RegisterUserHandler(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
-
-	go func() {
-		err := h.mailer.SendMail(output.Email, "welcome-email", map[string]any{
-			"NAME": output.FirstName + " " + output.LastName,
-			"MAIL": output.Email,
-		})
-		if err != nil {
-			logger.Error("Failed to send welcome email:", err)
-		}
-	}()
 
 	return c.JSON(http.StatusCreated, output)
 }
@@ -119,4 +108,34 @@ func (h *AuthHandler) LogoutUserHandler(c echo.Context) error {
 	c.SetCookie(clearCookie)
 
 	return c.JSON(http.StatusOK, result)
+}
+
+func (h *AuthHandler) ForgotPasswordHandler(c echo.Context) error {
+	var req usecase.ForgotPasswordInput
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
+	}
+
+	ctx := c.Request().Context()
+	output, err := h.usecase.ForgotPassword(ctx, req)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, output)
+}
+
+func (h *AuthHandler) ResetPasswordHandler(c echo.Context) error {
+	var req usecase.ResetPasswordInput
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
+	}
+
+	ctx := c.Request().Context()
+	output, err := h.usecase.ResetPassword(ctx, req)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, output)
 }

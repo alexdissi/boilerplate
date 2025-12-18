@@ -6,26 +6,32 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"my_project/internal/auth/domain"
 	"my_project/internal/auth/repository"
 	"my_project/pkg/logger"
+	"my_project/pkg/mailer"
 	"my_project/pkg/password"
 
 	"github.com/bluele/gcache"
 )
 
 type UserService struct {
-	repo  repository.UserRepository
-	cache gcache.Cache
+	repo   repository.UserRepository
+	cache  gcache.Cache
+	mailer mailer.Mailer
+	appUrl string
 }
 
-func NewUserService(r repository.UserRepository) UserUsecase {
+func NewUserService(r repository.UserRepository, m mailer.Mailer) UserUsecase {
 	return &UserService{
-		repo:  r,
-		cache: gcache.New(100).LRU().Expiration(time.Minute * 15).Build(),
+		repo:   r,
+		cache:  gcache.New(100).LRU().Expiration(time.Minute * 15).Build(),
+		mailer: m,
+		appUrl: os.Getenv("APP_URL"),
 	}
 }
 
@@ -70,12 +76,20 @@ func (s *UserService) RegisterUser(ctx context.Context, input RegisterUserInput)
 		return RegisterUserOutput{}, fmt.Errorf("failed to create user: %w", err)
 	}
 
+	go func() {
+		err := s.mailer.SendMail(createdUser.Email, "welcome-email", map[string]any{
+			"NAME": createdUser.FirstName + " " + createdUser.LastName,
+			"MAIL": createdUser.Email,
+		})
+		if err != nil {
+			logger.Error("Failed to send welcome email:", err)
+		}
+	}()
+
 	return RegisterUserOutput{
-		ID:        createdUser.ID.String(),
-		Email:     createdUser.Email,
-		FirstName: createdUser.FirstName,
-		LastName:  createdUser.LastName,
-		Message:   "User created successfully",
+		ID:      createdUser.ID.String(),
+		Email:   createdUser.Email,
+		Message: "User created successfully",
 	}, nil
 }
 
@@ -210,6 +224,78 @@ func (s *UserService) LoginWithGoogle(ctx context.Context, input GoogleAuthInput
 	}
 
 	return s.createSessionForExistingUser(ctx, createdUser, userAgent, ipAddress)
+}
+
+func (s *UserService) ForgotPassword(ctx context.Context, input ForgotPasswordInput) (ForgotPasswordOutput, error) {
+	if input.Email == "" {
+		return ForgotPasswordOutput{}, domain.ErrInvalidUserEmail
+	}
+
+	user, err := s.repo.GetUserByEmail(ctx, input.Email)
+	if err != nil {
+		return ForgotPasswordOutput{
+			Message: "If an account with this email exists, you will receive password reset instructions",
+		}, nil
+	}
+
+	resetToken, err := domain.GenerateSecureToken()
+	if err != nil {
+		logger.Error("Failed to generate reset token:", err)
+		return ForgotPasswordOutput{}, fmt.Errorf("failed to generate reset token: %w", err)
+	}
+
+	expiresAt := time.Now().Add(time.Hour * 1)
+	err = s.repo.SetResetPasswordToken(ctx, user.Email, resetToken, expiresAt)
+	if err != nil {
+		logger.Error("Failed to set reset password token:", err)
+		return ForgotPasswordOutput{}, fmt.Errorf("failed to set reset token: %w", err)
+	}
+
+	go func() {
+		resetLink := s.appUrl + "/reset-password?token=" + resetToken
+		err := s.mailer.SendMail(user.Email, "forgot-password", map[string]any{
+			"RESET_LINK": resetLink,
+		})
+		if err != nil {
+			logger.Error("Failed to send forgot password email:", err)
+		}
+	}()
+
+	return ForgotPasswordOutput{
+		Message: "If an account with this email exists, you will receive password reset instructions",
+	}, nil
+}
+
+func (s *UserService) ResetPassword(ctx context.Context, input ResetPasswordInput) (ResetPasswordOutput, error) {
+	if input.Token == "" {
+		return ResetPasswordOutput{}, domain.ErrInvalidCredentials
+	}
+
+	if !domain.IsValidPassword(input.Password) {
+		return ResetPasswordOutput{}, domain.ErrInvalidUserPasswordFormat
+	}
+
+	user, err := s.repo.GetUserByResetToken(ctx, input.Token)
+	if err != nil {
+		logger.Error("Invalid or expired reset token used")
+		return ResetPasswordOutput{}, domain.ErrInvalidCredentials
+	}
+
+	hashedPassword, err := password.HashPassword(input.Password)
+	if err != nil {
+		logger.Error("Failed to hash new password:", err)
+		return ResetPasswordOutput{}, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	err = s.repo.ResetPassword(ctx, user.ID, hashedPassword)
+	if err != nil {
+		logger.Error("Failed to reset password:", err)
+		return ResetPasswordOutput{}, fmt.Errorf("failed to reset password: %w", err)
+	}
+
+	return ResetPasswordOutput{
+		Message: "Password reset successful",
+	}, nil
 }
 
 func (s *UserService) getGoogleUserInfo(accessToken string) (*GoogleUserInfo, error) {

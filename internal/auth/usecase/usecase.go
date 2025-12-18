@@ -8,4 +8,6 @@ type UserUsecase interface {
 	LogoutUser(ctx context.Context, token string) (LogoutOutput, error)
 	LoginWithGoogle(ctx context.Context, input GoogleAuthInput, userAgent, ipAddress string) (GoogleAuthOutput, error)
 	LoginWithGoogleInfo(ctx context.Context, userInfo *GoogleUserInfo, userAgent, ipAddress string) (GoogleAuthOutput, error)
+	ForgotPassword(ctx context.Context, input ForgotPasswordInput) (ForgotPasswordOutput, error)
+	ResetPassword(ctx context.Context, input ResetPasswordInput) (ResetPasswordOutput, error)
 }

@@ -7,6 +7,7 @@ import (
 	"my_project/internal/auth/domain"
 	"my_project/internal/auth/usecase"
 	"my_project/pkg/logger"
+	"my_project/pkg/mailer"
 	"my_project/pkg/password"
 
 	"github.com/google/uuid"
@@ -22,8 +23,33 @@ func init() {
 func setupService(t *testing.T) (*MockUserRepository, usecase.UserUsecase) {
 	ctrl := gomock.NewController(t)
 	mockRepo := NewMockUserRepository(ctrl)
-	service := usecase.NewUserService(mockRepo)
+	mockMailer := &mockMailer{
+		sendCalls: make([]sendCall, 0),
+	}
+
+	service := usecase.NewUserService(mockRepo, mockMailer)
 	return mockRepo, service
+}
+
+type mockMailer struct {
+	sendCalls []sendCall
+}
+
+var _ mailer.Mailer = (*mockMailer)(nil)
+
+type sendCall struct {
+	to       string
+	template string
+	data     map[string]any
+}
+
+func (m *mockMailer) SendMail(to string, id string, data map[string]any) error {
+	m.sendCalls = append(m.sendCalls, sendCall{
+		to:       to,
+		template: id,
+		data:     data,
+	})
+	return nil
 }
 
 func TestRegisterUser_Success(t *testing.T) {
@@ -341,5 +367,163 @@ func TestLogoutUser_SessionNotFound(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to logout")
+	assert.Empty(t, result.Message)
+}
+
+func TestForgotPassword_Success(t *testing.T) {
+	mockRepo, service := setupService(t)
+	defer mockRepo.ctrl.Finish()
+
+	ctx := context.Background()
+	input := usecase.ForgotPasswordInput{
+		Email: "john.doe@example.com",
+	}
+
+	userID := uuid.New()
+	existingUser := &domain.UserAuth{
+		ID:           userID,
+		Email:        "john.doe@example.com",
+		PasswordHash: "hashed_password",
+		FirstName:    "John",
+		LastName:     "Doe",
+		IsActive:     true,
+	}
+
+	mockRepo.EXPECT().
+		GetUserByEmail(ctx, input.Email).
+		Return(existingUser, nil)
+
+	mockRepo.EXPECT().
+		SetResetPasswordToken(ctx, input.Email, gomock.Any(), gomock.Any()).
+		Return(nil)
+
+	result, err := service.ForgotPassword(ctx, input)
+
+	require.NoError(t, err)
+	assert.Equal(t, "If an account with this email exists, you will receive password reset instructions", result.Message)
+}
+
+func TestForgotPassword_UserNotFound(t *testing.T) {
+	mockRepo, service := setupService(t)
+	defer mockRepo.ctrl.Finish()
+
+	ctx := context.Background()
+	input := usecase.ForgotPasswordInput{
+		Email: "nonexistent@example.com",
+	}
+
+	mockRepo.EXPECT().
+		GetUserByEmail(ctx, input.Email).
+		Return(nil, assert.AnError)
+
+	result, err := service.ForgotPassword(ctx, input)
+
+	require.NoError(t, err)
+	assert.Equal(t, "If an account with this email exists, you will receive password reset instructions", result.Message)
+}
+
+func TestForgotPassword_InvalidEmail(t *testing.T) {
+	_, service := setupService(t)
+
+	ctx := context.Background()
+	input := usecase.ForgotPasswordInput{
+		Email: "",
+	}
+
+	result, err := service.ForgotPassword(ctx, input)
+
+	assert.Error(t, err)
+	assert.Equal(t, domain.ErrInvalidUserEmail, err)
+	assert.Empty(t, result.Message)
+}
+
+// Reset Password Tests
+
+func TestResetPassword_Success(t *testing.T) {
+	mockRepo, service := setupService(t)
+	defer mockRepo.ctrl.Finish()
+
+	ctx := context.Background()
+	input := usecase.ResetPasswordInput{
+		Token:    "valid_reset_token_123",
+		Password: "NewPassword123!",
+	}
+
+	userID := uuid.New()
+	existingUser := &domain.UserAuth{
+		ID:           userID,
+		Email:        "john.doe@example.com",
+		PasswordHash: "hashed_password",
+		FirstName:    "John",
+		LastName:     "Doe",
+		IsActive:     true,
+	}
+
+	mockRepo.EXPECT().
+		GetUserByResetToken(ctx, input.Token).
+		Return(existingUser, nil)
+
+	mockRepo.EXPECT().
+		ResetPassword(ctx, userID, gomock.Any()).
+		Return(nil)
+
+	result, err := service.ResetPassword(ctx, input)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Password reset successful", result.Message)
+}
+
+func TestResetPassword_InvalidToken(t *testing.T) {
+	mockRepo, service := setupService(t)
+	defer mockRepo.ctrl.Finish()
+
+	ctx := context.Background()
+	input := usecase.ResetPasswordInput{
+		Token:    "",
+		Password: "NewPassword123!",
+	}
+
+	result, err := service.ResetPassword(ctx, input)
+
+	assert.Error(t, err)
+	assert.Equal(t, domain.ErrInvalidCredentials, err)
+	assert.Empty(t, result.Message)
+}
+
+func TestResetPassword_InvalidPassword(t *testing.T) {
+	mockRepo, service := setupService(t)
+	defer mockRepo.ctrl.Finish()
+
+	ctx := context.Background()
+	input := usecase.ResetPasswordInput{
+		Token:    "valid_reset_token_123",
+		Password: "weak",
+	}
+
+	result, err := service.ResetPassword(ctx, input)
+
+	assert.Error(t, err)
+	assert.Equal(t, domain.ErrInvalidUserPasswordFormat, err)
+	assert.Empty(t, result.Message)
+}
+
+func TestResetPassword_TokenNotFound(t *testing.T) {
+	mockRepo, service := setupService(t)
+	defer mockRepo.ctrl.Finish()
+
+	ctx := context.Background()
+	input := usecase.ResetPasswordInput{
+		Token:    "nonexistent_token_123",
+		Password: "NewPassword123!",
+	}
+
+	mockRepo.EXPECT().
+		GetUserByResetToken(ctx, input.Token).
+		Return(nil, assert.AnError)
+
+	result, err := service.ResetPassword(ctx, input)
+
+	assert.Error(t, err)
+	assert.Equal(t, domain.ErrInvalidCredentials, err)
 	assert.Empty(t, result.Message)
 }
