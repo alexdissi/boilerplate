@@ -6,6 +6,7 @@ import (
 	"my_project/internal/auth/usecase"
 	"my_project/internal/middleware"
 	"my_project/pkg/logger"
+	"my_project/pkg/mailer"
 	"net/http"
 	"time"
 
@@ -14,11 +15,13 @@ import (
 
 type AuthHandler struct {
 	usecase usecase.UserUsecase
+	mailer  mailer.Mailer
 }
 
-func NewAuthHandler(u usecase.UserUsecase) *AuthHandler {
+func NewAuthHandler(u usecase.UserUsecase, m mailer.Mailer) *AuthHandler {
 	return &AuthHandler{
 		usecase: u,
+		mailer:  m,
 	}
 }
 
@@ -39,6 +42,16 @@ func (h *AuthHandler) RegisterUserHandler(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
+
+	go func() {
+		err := h.mailer.SendMail(output.Email, "welcome-email", map[string]any{
+			"NAME": output.FirstName + " " + output.LastName,
+			"MAIL": output.Email,
+		})
+		if err != nil {
+			logger.Error("Failed to send welcome email:", err)
+		}
+	}()
 
 	return c.JSON(http.StatusCreated, output)
 }

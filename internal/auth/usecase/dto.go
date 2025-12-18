@@ -8,9 +8,11 @@ type RegisterUserInput struct {
 }
 
 type RegisterUserOutput struct {
-	ID      string `json:"id"`
-	Email   string `json:"email"`
-	Message string `json:"message"`
+	ID        string `json:"id"`
+	Email     string `json:"email"`
+	FirstName string `json:"firstName"`
+	LastName  string `json:"lastName"`
+	Message   string `json:"message"`
 }
 
 type LoginUserInput struct {
