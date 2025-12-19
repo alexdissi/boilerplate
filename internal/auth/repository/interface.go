@@ -2,8 +2,8 @@ package repository
 
 import (
 	"context"
-	"time"
 	"my_project/internal/auth/domain"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -23,4 +23,5 @@ type UserRepository interface {
 	GetUserByResetToken(ctx context.Context, token string) (*domain.UserAuth, error)
 	ResetPassword(ctx context.Context, userID uuid.UUID, newPasswordHash string) error
 	UpdateLastLoginAt(ctx context.Context, userID uuid.UUID) error
+	CreateSubscription(ctx context.Context, subscription *domain.AuthSubscription) error
 }

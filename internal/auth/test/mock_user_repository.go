@@ -57,6 +57,20 @@ func (mr *MockUserRepositoryMockRecorder) CreateSession(ctx, session any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateSession", reflect.TypeOf((*MockUserRepository)(nil).CreateSession), ctx, session)
 }
 
+// CreateSubscription mocks base method.
+func (m *MockUserRepository) CreateSubscription(ctx context.Context, subscription *domain.AuthSubscription) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateSubscription", ctx, subscription)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateSubscription indicates an expected call of CreateSubscription.
+func (mr *MockUserRepositoryMockRecorder) CreateSubscription(ctx, subscription any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateSubscription", reflect.TypeOf((*MockUserRepository)(nil).CreateSubscription), ctx, subscription)
+}
+
 // CreateUser mocks base method.
 func (m *MockUserRepository) CreateUser(ctx context.Context, user *domain.UserAuth) (*domain.UserAuth, error) {
 	m.ctrl.T.Helper()

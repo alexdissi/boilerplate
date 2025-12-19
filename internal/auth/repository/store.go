@@ -228,3 +228,14 @@ func (s *UserStore) UpdateLastLoginAt(ctx context.Context, userID uuid.UUID) err
 	_, err := s.db.Pool().Exec(ctx, query, userID)
 	return err
 }
+
+func (s *UserStore) CreateSubscription(ctx context.Context, subscription *domain.AuthSubscription) error {
+	query := `INSERT INTO subscriptions (user_id, started_at)
+			  VALUES ($1, $2)`
+
+	_, err := s.db.Pool().Exec(ctx, query,
+		subscription.UserID,
+		time.Now(),
+	)
+	return err
+}
