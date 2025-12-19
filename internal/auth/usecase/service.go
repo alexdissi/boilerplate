@@ -356,7 +356,6 @@ func (s *UserService) getGoogleUserInfo(accessToken string) (*GoogleUserInfo, er
 }
 
 func (s *UserService) createSessionForExistingUser(ctx context.Context, user *domain.UserAuth, userAgent, ipAddress string) (GoogleAuthOutput, error) {
-	// Update last login timestamp
 	err := s.repo.UpdateLastLoginAt(ctx, user.ID)
 	if err != nil {
 		logger.Error("Failed to update last login timestamp for Google user:", err)
