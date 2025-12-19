@@ -183,6 +183,10 @@ func TestLoginUser_Success(t *testing.T) {
 		Return(existingUser, nil)
 
 	mockRepo.EXPECT().
+		UpdateLastLoginAt(ctx, userID).
+		Return(nil)
+
+	mockRepo.EXPECT().
 		CreateSession(ctx, gomock.Any()).
 		DoAndReturn(func(_ context.Context, session *domain.Session) error {
 			assert.Equal(t, userID, session.UserID)
@@ -322,6 +326,10 @@ func TestLoginUser_CreateSessionError(t *testing.T) {
 	mockRepo.EXPECT().
 		GetUserByEmail(ctx, input.Email).
 		Return(existingUser, nil)
+
+	mockRepo.EXPECT().
+		UpdateLastLoginAt(ctx, userID).
+		Return(nil)
 
 	mockRepo.EXPECT().
 		CreateSession(ctx, gomock.Any()).

@@ -128,8 +128,14 @@ func (s *UserService) LoginUser(ctx context.Context, input LoginUserInput, userA
 
 	s.cache.Remove(input.Email)
 
+	err = s.repo.UpdateLastLoginAt(ctx, user.ID)
+	if err != nil {
+		logger.Error("Failed to update last login timestamp:", err)
+	}
+
 	token, err := domain.GenerateSecureToken()
 	if err != nil {
+		logger.Error("Failed to generate session token:", err)
 		return LoginUserOutput{}, fmt.Errorf("failed to generate session token: %w", err)
 	}
 
@@ -189,13 +195,11 @@ func (s *UserService) LoginWithGoogle(ctx context.Context, input GoogleAuthInput
 		return GoogleAuthOutput{}, domain.ErrOAuthEmailRequired
 	}
 
-	// Check if user already exists with this Google ID
 	user, err := s.repo.GetUserByGoogleID(ctx, googleUser.ID)
 	if err == nil {
 		return s.createSessionForExistingUser(ctx, user, userAgent, ipAddress)
 	}
 
-	// Check if user exists with this email but no Google OAuth yet
 	user, err = s.repo.GetUserByEmail(ctx, googleUser.Email)
 	if err == nil {
 		err = s.repo.UpdateGoogleOAuth(ctx, user.ID, googleUser.ID, domain.AuthProviderGoogle)
@@ -222,6 +226,16 @@ func (s *UserService) LoginWithGoogle(ctx context.Context, input GoogleAuthInput
 		logger.Error("Failed to create Google user:", err)
 		return GoogleAuthOutput{}, fmt.Errorf("failed to create user: %w", err)
 	}
+
+	go func() {
+		err := s.mailer.SendMail(createdUser.Email, "welcome-email", map[string]any{
+			"NAME": createdUser.FirstName + " " + createdUser.LastName,
+			"MAIL": createdUser.Email,
+		})
+		if err != nil {
+			logger.Error("Failed to send welcome email:", err)
+		}
+	}()
 
 	return s.createSessionForExistingUser(ctx, createdUser, userAgent, ipAddress)
 }
@@ -342,6 +356,13 @@ func (s *UserService) getGoogleUserInfo(accessToken string) (*GoogleUserInfo, er
 }
 
 func (s *UserService) createSessionForExistingUser(ctx context.Context, user *domain.UserAuth, userAgent, ipAddress string) (GoogleAuthOutput, error) {
+	// Update last login timestamp
+	err := s.repo.UpdateLastLoginAt(ctx, user.ID)
+	if err != nil {
+		logger.Error("Failed to update last login timestamp for Google user:", err)
+		return GoogleAuthOutput{}, fmt.Errorf("failed to update last login: %w", err)
+	}
+
 	token, err := domain.GenerateSecureToken()
 	if err != nil {
 		return GoogleAuthOutput{}, fmt.Errorf("failed to generate session token: %w", err)

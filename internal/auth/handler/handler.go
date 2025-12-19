@@ -28,6 +28,8 @@ func (h *AuthHandler) Bind(e *echo.Group) {
 	e.POST("/logout", h.LogoutUserHandler, middleware.CookieSessionMiddleware())
 	e.POST("/forgot-password", h.ForgotPasswordHandler)
 	e.POST("/reset-password", h.ResetPasswordHandler)
+
+	e.POST("/logout", h.LogoutUserHandler, middleware.CookieSessionMiddleware())
 }
 
 func (h *AuthHandler) RegisterUserHandler(c echo.Context) error {

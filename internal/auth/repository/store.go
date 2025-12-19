@@ -221,3 +221,10 @@ func (s *UserStore) ResetPassword(ctx context.Context, userID uuid.UUID, newPass
 	_, err := s.db.Pool().Exec(ctx, query, userID, newPasswordHash)
 	return err
 }
+
+func (s *UserStore) UpdateLastLoginAt(ctx context.Context, userID uuid.UUID) error {
+	query := `UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1`
+
+	_, err := s.db.Pool().Exec(ctx, query, userID)
+	return err
+}
