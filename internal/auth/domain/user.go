@@ -19,6 +19,10 @@ type UserAuth struct {
 	OAuthProvider  OAuthProvider
 }
 
+type AuthSubscription struct {
+	UserID string
+}
+
 func (u *UserAuth) Validate() error {
 	if u.Email == "" {
 		return ErrInvalidUserEmail
