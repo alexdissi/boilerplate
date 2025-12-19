@@ -22,4 +22,5 @@ type UserRepository interface {
 	SetResetPasswordToken(ctx context.Context, email, token string, expiresAt time.Time) error
 	GetUserByResetToken(ctx context.Context, token string) (*domain.UserAuth, error)
 	ResetPassword(ctx context.Context, userID uuid.UUID, newPasswordHash string) error
+	UpdateLastLoginAt(ctx context.Context, userID uuid.UUID) error
 }

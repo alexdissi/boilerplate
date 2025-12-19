@@ -203,6 +203,20 @@ func (mr *MockUserRepositoryMockRecorder) UpdateGoogleOAuth(ctx, userID, googleI
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateGoogleOAuth", reflect.TypeOf((*MockUserRepository)(nil).UpdateGoogleOAuth), ctx, userID, googleID, provider)
 }
 
+// UpdateLastLoginAt mocks base method.
+func (m *MockUserRepository) UpdateLastLoginAt(ctx context.Context, userID uuid.UUID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateLastLoginAt", ctx, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateLastLoginAt indicates an expected call of UpdateLastLoginAt.
+func (mr *MockUserRepositoryMockRecorder) UpdateLastLoginAt(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLastLoginAt", reflect.TypeOf((*MockUserRepository)(nil).UpdateLastLoginAt), ctx, userID)
+}
+
 // UserExistsByEmail mocks base method.
 func (m *MockUserRepository) UserExistsByEmail(ctx context.Context, email string) (bool, error) {
 	m.ctrl.T.Helper()
