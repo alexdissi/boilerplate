@@ -2,7 +2,6 @@
 CREATE TABLE subscriptions (
     user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     cus_id VARCHAR(100) UNIQUE,
-    plan_id VARCHAR(100),
     plan TEXT NOT NULL DEFAULT 'FREE',
     license_count SMALLINT DEFAULT 0,
     paid BOOLEAN DEFAULT false,

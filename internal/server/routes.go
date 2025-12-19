@@ -5,6 +5,9 @@ import (
 	"my_project/internal/auth/repository"
 	"my_project/internal/auth/usecase"
 	sessionMiddleware "my_project/internal/middleware"
+	paymentHandler "my_project/internal/payment/handler"
+	paymentRepository "my_project/internal/payment/repository"
+	paymentUsecase "my_project/internal/payment/usecase"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -47,6 +50,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	apiGroup := e.Group("")
 
 	s.setupAuthRoutes(apiGroup)
+	s.setupPaymentRoutes(apiGroup)
 
 	return e
 }
@@ -72,4 +76,13 @@ func (s *Server) setupAuthRoutes(apiGroup *echo.Group) {
 	authGroup := apiGroup.Group("/auth")
 	authHandler.Bind(authGroup)
 	oauthHandler.Bind(authGroup)
+}
+
+func (s *Server) setupPaymentRoutes(apiGroup *echo.Group) {
+	subscriptionStore := paymentRepository.NewSubscriptionRepository(s.db)
+	paymentUseCase := paymentUsecase.NewPaymentUsecase(subscriptionStore)
+	paymentHandler := paymentHandler.NewPaymentHandler(paymentUseCase)
+
+	paymentGroup := apiGroup.Group("/payment")
+	paymentHandler.Bind(paymentGroup)
 }
