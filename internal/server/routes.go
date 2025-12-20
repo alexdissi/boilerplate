@@ -45,7 +45,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	}))
 	e.Use(middleware.BodyLimit("2MB"))
 	sessionMiddleware.InitSessionMiddleware(s.db.Pool())
-
+	sessionMiddleware.InitSubscriptionMiddleware(s.db.Pool())
 	e.GET("/", s.HelloWorldHandler)
 
 	e.GET("/health", s.healthHandler)
