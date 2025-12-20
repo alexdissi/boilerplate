@@ -1,7 +1,7 @@
 -- +goose Up
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TYPE oauth_provider AS ENUM ('email', 'google');
+CREATE TYPE oauth_provider AS ENUM ('EMAIL', 'GOOGLE');
 
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -16,7 +16,7 @@ CREATE TABLE users (
     last_login_at TIMESTAMPTZ,
     is_active BOOLEAN DEFAULT TRUE,  
     google_id TEXT UNIQUE,
-    oauth_provider oauth_provider DEFAULT 'email',
+    oauth_provider oauth_provider DEFAULT 'EMAIL',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
