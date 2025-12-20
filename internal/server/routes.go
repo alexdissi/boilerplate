@@ -9,6 +9,9 @@ import (
 	paymentHandler "my_project/internal/payment/handler"
 	paymentRepository "my_project/internal/payment/repository"
 	paymentUsecase "my_project/internal/payment/usecase"
+	usersHandler "my_project/internal/users/handler"
+	usersRepository "my_project/internal/users/repository"
+	usersUsecase "my_project/internal/users/usecase"
 	"net/http"
 	"os"
 
@@ -52,6 +55,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	apiGroup := e.Group("")
 
 	s.setupAuthRoutes(apiGroup)
+	s.setupUsersRoutes(apiGroup)
 	s.setupPaymentRoutes(apiGroup)
 
 	return e
@@ -104,4 +108,13 @@ func (s *Server) setupPaymentRoutes(apiGroup *echo.Group) {
 
 	paymentGroup := apiGroup.Group("/payment")
 	paymentHandler.Bind(paymentGroup)
+}
+
+func (s *Server) setupUsersRoutes(apiGroup *echo.Group) {
+	userStore := usersRepository.NewUserStore(s.db)
+	usersUseCase := usersUsecase.NewUserUsecase(userStore)
+	usersHandler := usersHandler.NewUserHandler(usersUseCase)
+
+	usersGroup := apiGroup.Group("/users")
+	usersHandler.Bind(usersGroup)
 }
