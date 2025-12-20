@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"my_project/internal/payment/domain"
 	"my_project/pkg/logger"
-	"os"
 	"strconv"
 	"time"
 
@@ -29,25 +28,28 @@ func (p *paymentService) handleCheckoutSessionCompleted(ctx context.Context, eve
 		return fmt.Errorf("missing user_id in checkout session metadata")
 	}
 
-	plan, ok := sess.Metadata["plan"]
-	if !ok {
-		return fmt.Errorf("missing plan in checkout session metadata")
-	}
-
-	quantity, err := extractQuantityFromMetadata(sess.Metadata)
-	if err != nil {
-		return fmt.Errorf("invalid quantity in metadata: %w", err)
-	}
-
 	userUUID, err := uuid.Parse(userID)
 	if err != nil {
 		return fmt.Errorf("invalid user ID format: %w", err)
 	}
 
+	quantityStr, ok := sess.Metadata["quantity"]
+	var quantity int = 1
+	if ok {
+		q, err := strconv.Atoi(quantityStr)
+		if err == nil && q > 0 {
+			if q > 100 {
+				quantity = 100
+			} else {
+				quantity = q
+			}
+		}
+	}
+
 	subscription := &domain.Subscription{
 		UserID:             userUUID,
-		Plan:               domain.SubscriptionPlan(plan),
-		CusID:              sess.Customer.ID,
+		Plan:               domain.SubscriptionPlan(sess.Metadata["plan"]),
+		CusID:              &sess.Customer.ID,
 		LicenseCount:       quantity,
 		Status:             domain.StatusPending,
 		Paid:               false,
@@ -59,33 +61,42 @@ func (p *paymentService) handleCheckoutSessionCompleted(ctx context.Context, eve
 	}
 
 	if createErr := p.subscriptionRepo.CreateSubscription(ctx, subscription); createErr != nil {
-		if createErr.Error() == "pq: duplicate key value violates unique constraint \"subscriptions_user_id_key\"" ||
-			createErr.Error() == "UNIQUE constraint failed: subscriptions.user_id" {
-			return p.updateExistingSubscription(ctx, userID, sess.Customer.ID)
+		existing, err := p.subscriptionRepo.GetSubscriptionByUserID(ctx, subscription.UserID.String())
+		if err != nil {
+			return fmt.Errorf("failed to find existing subscription: %w", err)
 		}
-		return fmt.Errorf("failed to create subscription: %w", createErr)
+		existing.CusID = subscription.CusID
+		existing.Status = domain.StatusPending
+		existing.UpdatedAt = time.Now().Unix()
+		if updateErr := p.subscriptionRepo.UpdateSubscription(ctx, existing); updateErr != nil {
+			return fmt.Errorf("failed to update existing subscription after checkout: %w", updateErr)
+		}
 	}
 
-	logger.Info("checkout session completed", map[string]any{
-		"user_id":     userID,
-		"plan":        plan,
-		"customer_id": sess.Customer.ID,
+	logger.Info("checkout session completed and subscription created/updated", map[string]any{
+		"user_id":     subscription.UserID,
+		"plan":        subscription.Plan,
+		"customer_id": subscription.CusID,
 	})
 
 	return nil
 }
 
 func (p *paymentService) handleInvoicePaymentSucceeded(ctx context.Context, event stripe.Event) error {
-	invoice, err := extractInvoice(event)
-	if err != nil {
-		return err
+	var invoice stripe.Invoice
+	if err := json.Unmarshal(event.Data.Raw, &invoice); err != nil {
+		return fmt.Errorf("invalid invoice payload: %w", err)
 	}
 
 	if invoice.Customer == nil {
 		return fmt.Errorf("missing customer in invoice")
 	}
 
-	subscription, err := p.findSubscriptionForInvoice(ctx, invoice)
+	if len(invoice.Lines.Data) == 0 || invoice.Lines.Data[0].Subscription == nil {
+		return fmt.Errorf("no subscription in invoice")
+	}
+	subID := invoice.Lines.Data[0].Subscription.ID
+	subscription, err := p.subscriptionRepo.GetSubscriptionBySubID(ctx, subID)
 	if err != nil {
 		return fmt.Errorf("failed to find subscription for invoice: %w", err)
 	}
@@ -125,16 +136,20 @@ func (p *paymentService) handleInvoicePaymentSucceeded(ctx context.Context, even
 }
 
 func (p *paymentService) handleInvoicePaymentFailed(ctx context.Context, event stripe.Event) error {
-	invoice, err := extractInvoice(event)
-	if err != nil {
-		return err
+	var invoice stripe.Invoice
+	if err := json.Unmarshal(event.Data.Raw, &invoice); err != nil {
+		return fmt.Errorf("invalid invoice payload: %w", err)
 	}
 
 	if invoice.Customer == nil {
 		return fmt.Errorf("missing customer in invoice")
 	}
 
-	subscription, err := p.findSubscriptionForInvoice(ctx, invoice)
+	if len(invoice.Lines.Data) == 0 || invoice.Lines.Data[0].Subscription == nil {
+		return fmt.Errorf("no subscription in invoice")
+	}
+	subID := invoice.Lines.Data[0].Subscription.ID
+	subscription, err := p.subscriptionRepo.GetSubscriptionBySubID(ctx, subID)
 	if err != nil {
 		return fmt.Errorf("failed to find subscription for failed invoice: %w", err)
 	}
@@ -156,9 +171,9 @@ func (p *paymentService) handleInvoicePaymentFailed(ctx context.Context, event s
 }
 
 func (p *paymentService) handleSubscriptionCreated(ctx context.Context, event stripe.Event) error {
-	sub, err := extractSubscription(event)
-	if err != nil {
-		return err
+	var sub stripe.Subscription
+	if err := json.Unmarshal(event.Data.Raw, &sub); err != nil {
+		return fmt.Errorf("invalid subscription payload: %w", err)
 	}
 
 	if sub.Customer == nil {
@@ -177,7 +192,28 @@ func (p *paymentService) handleSubscriptionCreated(ctx context.Context, event st
 			"sub_id":  sub.ID,
 			"user_id": existing.UserID,
 		})
-		return p.updateExistingFromStripeSubscription(ctx, existing, sub)
+		existing.SubID = &sub.ID
+		existing.Status = domain.SubscriptionStatus(sub.Status)
+		existing.CurrentPeriodStart = sub.StartDate
+		existing.CurrentPeriodEnd = sub.EndedAt
+		existing.CancelAtPeriodEnd = sub.CancelAtPeriodEnd
+		existing.UpdatedAt = time.Now().Unix()
+
+		if len(sub.Items.Data) > 0 {
+			item := sub.Items.Data[0]
+			existing.LicenseCount = int(item.Quantity)
+			if item.Price != nil {
+				switch item.Price.ID {
+				case p.config.PriceBusinessID:
+					existing.Plan = domain.PlanBusiness
+				case p.config.PriceProID:
+					existing.Plan = domain.PlanProfessional
+				default:
+					existing.Plan = domain.PlanBusiness
+				}
+			}
+		}
+		return p.subscriptionRepo.UpdateSubscription(ctx, existing)
 	}
 
 	if sub.Metadata != nil {
@@ -188,7 +224,28 @@ func (p *paymentService) handleSubscriptionCreated(ctx context.Context, event st
 					"sub_id":  sub.ID,
 					"user_id": userID,
 				})
-				return p.updateExistingFromStripeSubscription(ctx, existing, sub)
+				existing.SubID = &sub.ID
+				existing.Status = domain.SubscriptionStatus(sub.Status)
+				existing.CurrentPeriodStart = sub.StartDate
+				existing.CurrentPeriodEnd = sub.EndedAt
+				existing.CancelAtPeriodEnd = sub.CancelAtPeriodEnd
+				existing.UpdatedAt = time.Now().Unix()
+
+				if len(sub.Items.Data) > 0 {
+					item := sub.Items.Data[0]
+					existing.LicenseCount = int(item.Quantity)
+					if item.Price != nil {
+						switch item.Price.ID {
+						case p.config.PriceBusinessID:
+							existing.Plan = domain.PlanBusiness
+						case p.config.PriceProID:
+							existing.Plan = domain.PlanProfessional
+						default:
+							existing.Plan = domain.PlanBusiness
+						}
+					}
+				}
+				return p.subscriptionRepo.UpdateSubscription(ctx, existing)
 			}
 		}
 	}
@@ -203,9 +260,9 @@ func (p *paymentService) handleSubscriptionCreated(ctx context.Context, event st
 }
 
 func (p *paymentService) handleSubscriptionUpdated(ctx context.Context, event stripe.Event) error {
-	sub, err := extractSubscription(event)
-	if err != nil {
-		return err
+	var sub stripe.Subscription
+	if err := json.Unmarshal(event.Data.Raw, &sub); err != nil {
+		return fmt.Errorf("invalid subscription payload: %w", err)
 	}
 
 	existing, err := p.subscriptionRepo.GetSubscriptionBySubID(ctx, sub.ID)
@@ -213,13 +270,34 @@ func (p *paymentService) handleSubscriptionUpdated(ctx context.Context, event st
 		return fmt.Errorf("subscription not found: %w", err)
 	}
 
-	return p.updateExistingFromStripeSubscription(ctx, existing, sub)
+	existing.SubID = &sub.ID
+	existing.Status = domain.SubscriptionStatus(sub.Status)
+	existing.CurrentPeriodStart = sub.StartDate
+	existing.CurrentPeriodEnd = sub.EndedAt
+	existing.CancelAtPeriodEnd = sub.CancelAtPeriodEnd
+	existing.UpdatedAt = time.Now().Unix()
+
+	if len(sub.Items.Data) > 0 {
+		item := sub.Items.Data[0]
+		existing.LicenseCount = int(item.Quantity)
+		if item.Price != nil {
+			switch item.Price.ID {
+			case p.config.PriceBusinessID:
+				existing.Plan = domain.PlanBusiness
+			case p.config.PriceProID:
+				existing.Plan = domain.PlanProfessional
+			default:
+				existing.Plan = domain.PlanBusiness
+			}
+		}
+	}
+	return p.subscriptionRepo.UpdateSubscription(ctx, existing)
 }
 
 func (p *paymentService) handleSubscriptionDeleted(ctx context.Context, event stripe.Event) error {
-	sub, err := extractSubscription(event)
-	if err != nil {
-		return err
+	var sub stripe.Subscription
+	if err := json.Unmarshal(event.Data.Raw, &sub); err != nil {
+		return fmt.Errorf("invalid subscription payload: %w", err)
 	}
 
 	existing, err := p.subscriptionRepo.GetSubscriptionBySubID(ctx, sub.ID)
@@ -243,137 +321,3 @@ func (p *paymentService) handleSubscriptionDeleted(ctx context.Context, event st
 	return nil
 }
 
-func extractQuantityFromMetadata(metadata map[string]string) (int, error) {
-	quantityStr, ok := metadata["quantity"]
-	if !ok {
-		return 1, nil
-	}
-
-	quantity, err := strconv.Atoi(quantityStr)
-	if err != nil || quantity < 1 {
-		return 1, fmt.Errorf("invalid quantity: %s", quantityStr)
-	}
-
-	if quantity > 100 {
-		return 100, nil
-	}
-
-	return quantity, nil
-}
-
-func extractInvoice(event stripe.Event) (*stripe.Invoice, error) {
-	var invoice stripe.Invoice
-	if err := json.Unmarshal(event.Data.Raw, &invoice); err != nil {
-		return nil, fmt.Errorf("invalid invoice payload: %w", err)
-	}
-	return &invoice, nil
-}
-
-func extractSubscription(event stripe.Event) (*stripe.Subscription, error) {
-	var sub stripe.Subscription
-	if err := json.Unmarshal(event.Data.Raw, &sub); err != nil {
-		return nil, fmt.Errorf("invalid subscription payload: %w", err)
-	}
-	return &sub, nil
-}
-
-func (p *paymentService) findSubscriptionForInvoice(ctx context.Context, invoice *stripe.Invoice) (*domain.Subscription, error) {
-	if len(invoice.Lines.Data) == 0 || invoice.Lines.Data[0].Subscription == nil {
-		return nil, fmt.Errorf("no subscription in invoice")
-	}
-
-	subID := invoice.Lines.Data[0].Subscription.ID
-	subscription, err := p.subscriptionRepo.GetSubscriptionBySubID(ctx, subID)
-	if err == nil {
-		return subscription, nil
-	}
-
-	return p.subscriptionRepo.GetSubscriptionByCustomerID(ctx, invoice.Customer.ID)
-}
-
-func (p *paymentService) updateExistingSubscription(ctx context.Context, userID, customerID string) error {
-	existing, err := p.subscriptionRepo.GetSubscriptionByUserID(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("failed to find existing subscription: %w", err)
-	}
-
-	existing.CusID = customerID
-	existing.Status = domain.StatusPending
-	existing.UpdatedAt = time.Now().Unix()
-
-	return p.subscriptionRepo.UpdateSubscription(ctx, existing)
-}
-
-func (p *paymentService) updateExistingFromStripeSubscription(ctx context.Context, existing *domain.Subscription, sub *stripe.Subscription) error {
-	existing.SubID = &sub.ID
-	existing.Status = domain.SubscriptionStatus(sub.Status)
-	existing.CurrentPeriodStart = sub.StartDate
-	existing.CurrentPeriodEnd = sub.EndedAt
-	existing.CancelAtPeriodEnd = sub.CancelAtPeriodEnd
-	existing.UpdatedAt = time.Now().Unix()
-
-	if len(sub.Items.Data) > 0 {
-		existing.LicenseCount = int(sub.Items.Data[0].Quantity)
-		if sub.Items.Data[0].Price != nil {
-			priceID := sub.Items.Data[0].Price.ID
-			switch priceID {
-			case os.Getenv("STRIPE_PRICE_BUSINESS_ID"):
-				existing.Plan = domain.PlanBusiness
-			case os.Getenv("STRIPE_PRICE_PROFESSIONAL_ID"):
-				existing.Plan = domain.PlanProfessional
-			default:
-				existing.Plan = domain.PlanBusiness
-			}
-		}
-	}
-
-	return p.subscriptionRepo.UpdateSubscription(ctx, existing)
-}
-
-func (p *paymentService) createFromSubscriptionMetadata(ctx context.Context, sub *stripe.Subscription) error {
-	if sub.Metadata == nil {
-		return fmt.Errorf("no metadata in subscription")
-	}
-
-	userID, ok := sub.Metadata["user_id"]
-	if !ok {
-		return fmt.Errorf("missing user_id in subscription metadata")
-	}
-
-	userUUID, err := uuid.Parse(userID)
-	if err != nil {
-		return fmt.Errorf("invalid user ID format: %w", err)
-	}
-
-	plan := domain.SubscriptionPlan(sub.Metadata["plan"])
-	quantity, _ := extractQuantityFromMetadata(sub.Metadata)
-
-	subscription := &domain.Subscription{
-		UserID:             userUUID,
-		Plan:               plan,
-		SubID:              &sub.ID,
-		CusID:              sub.Customer.ID,
-		LicenseCount:       quantity,
-		Status:             domain.SubscriptionStatus(sub.Status),
-		Paid:               sub.Status == "active" || sub.Status == "trialing",
-		CurrentPeriodStart: sub.StartDate,
-		CurrentPeriodEnd:   sub.EndedAt,
-		CancelAtPeriodEnd:  sub.CancelAtPeriodEnd,
-		CreatedAt:          time.Now().Unix(),
-		UpdatedAt:          time.Now().Unix(),
-	}
-
-	if len(sub.Items.Data) > 0 && sub.Items.Data[0].Price != nil {
-		priceID := sub.Items.Data[0].Price.ID
-		switch priceID {
-		case os.Getenv("STRIPE_PRICE_BUSINESS_ID"):
-			subscription.Plan = domain.PlanBusiness
-		case os.Getenv("STRIPE_PRICE_PROFESSIONAL_ID"):
-			subscription.Plan = domain.PlanProfessional
-		default:
-			subscription.Plan = domain.PlanBusiness
-		}
-	}
-
-	return p.subscriptionRepo.CreateSubscription(ctx, subscription)
-}

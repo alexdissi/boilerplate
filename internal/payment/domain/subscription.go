@@ -26,7 +26,7 @@ type Subscription struct {
 	UserID             uuid.UUID          `json:"user_id" db:"user_id"`
 	Plan               SubscriptionPlan   `json:"plan" db:"plan"`
 	SubID              *string            `json:"sub_id" db:"sub_id"`
-	CusID              string             `json:"cus_id" db:"cus_id"`
+	CusID              *string            `json:"cus_id" db:"cus_id"`
 	LicenseCount       int                `json:"license_count" db:"license_count"`
 	Status             SubscriptionStatus `json:"status" db:"status"`
 	Paid               bool               `json:"paid" db:"paid"`

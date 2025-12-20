@@ -5,10 +5,12 @@ import (
 	"my_project/internal/auth/repository"
 	"my_project/internal/auth/usecase"
 	sessionMiddleware "my_project/internal/middleware"
+	"my_project/internal/payment/client"
 	paymentHandler "my_project/internal/payment/handler"
 	paymentRepository "my_project/internal/payment/repository"
 	paymentUsecase "my_project/internal/payment/usecase"
 	"net/http"
+	"os"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -80,7 +82,24 @@ func (s *Server) setupAuthRoutes(apiGroup *echo.Group) {
 
 func (s *Server) setupPaymentRoutes(apiGroup *echo.Group) {
 	subscriptionStore := paymentRepository.NewSubscriptionRepository(s.db)
-	paymentUseCase := paymentUsecase.NewPaymentUsecase(subscriptionStore)
+
+	stripeConfig := client.StripeConfig{
+		SecretKey:     os.Getenv("STRIPE_SECRET_KEY"),
+		WebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
+		AppUrl:        os.Getenv("APP_URL"),
+	}
+
+	stripeProvider, err := client.NewStripeProvider(stripeConfig)
+	if err != nil {
+		panic("failed to initialize Stripe provider: " + err.Error())
+	}
+
+	paymentUsecaseConfig := paymentUsecase.Config{
+		PriceProID:      os.Getenv("STRIPE_PRICE_PROFESSIONAL_ID"),
+		PriceBusinessID: os.Getenv("STRIPE_PRICE_BUSINESS_ID"),
+	}
+
+	paymentUseCase := paymentUsecase.NewPaymentUsecase(subscriptionStore, stripeProvider, paymentUsecaseConfig)
 	paymentHandler := paymentHandler.NewPaymentHandler(paymentUseCase)
 
 	paymentGroup := apiGroup.Group("/payment")

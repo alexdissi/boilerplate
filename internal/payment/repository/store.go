@@ -121,7 +121,7 @@ func (s *subscriptionStore) queryOne(ctx context.Context, query sq.SelectBuilder
 		sub.SubID = &stripeSubID.String
 	}
 	if stripeCustID.Valid {
-		sub.CusID = stripeCustID.String
+		sub.CusID = &stripeCustID.String
 	}
 	if startedAt.Valid {
 		sub.CurrentPeriodStart = startedAt.Time.Unix()

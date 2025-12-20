@@ -57,5 +57,12 @@ func (h *PaymentHandler) CreateCheckoutSessionHandler(c echo.Context) error {
 }
 
 func (h *PaymentHandler) HandleWebhook(c echo.Context) error {
-	return h.usecase.HandleWebhook(c)
+	err := h.usecase.HandleWebhook(c.Request())
+	if err != nil {
+		if errors.Is(err, domain.ErrWebhook) {
+			return c.NoContent(http.StatusBadRequest)
+		}
+		return c.NoContent(http.StatusInternalServerError)
+	}
+	return c.NoContent(http.StatusOK)
 }

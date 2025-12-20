@@ -5,39 +5,31 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"my_project/internal/payment/client"
 	"my_project/internal/payment/domain"
 	"my_project/internal/payment/repository"
 	"my_project/pkg/logger"
 	"net/http"
-	"os"
-	"strconv"
 
-	"github.com/labstack/echo/v4"
-	"github.com/stripe/stripe-go/v84"
-	"github.com/stripe/stripe-go/v84/checkout/session"
-	"github.com/stripe/stripe-go/v84/webhook"
+	gostripe "github.com/stripe/stripe-go/v84"
 )
 
 type paymentService struct {
 	subscriptionRepo repository.SubscriptionRepository
-	appUrl           string
-	webhookSecret    string
+	provider         client.Provider
+	config           Config
 }
 
-func NewPaymentUsecase(subscriptionRepo repository.SubscriptionRepository) PaymentUsecase {
-	if key := os.Getenv("STRIPE_SECRET_KEY"); key != "" {
-		stripe.Key = key
-	}
+type Config struct {
+	PriceProID      string
+	PriceBusinessID string
+}
 
-	appUrl := os.Getenv("APP_URL")
-	if appUrl == "" {
-		appUrl = "http://localhost:3000"
-	}
-
+func NewPaymentUsecase(subscriptionRepo repository.SubscriptionRepository, provider client.Provider, config Config) PaymentUsecase {
 	return &paymentService{
 		subscriptionRepo: subscriptionRepo,
-		appUrl:           appUrl,
-		webhookSecret:    os.Getenv("STRIPE_WEBHOOK_SECRET"),
+		provider:         provider,
+		config:           config,
 	}
 }
 
@@ -58,9 +50,9 @@ func (p *paymentService) CreateCheckoutSession(ctx context.Context, userID, emai
 	var priceID string
 	switch input.Plan {
 	case domain.PlanBusiness:
-		priceID = os.Getenv("STRIPE_PRICE_BUSINESS_ID")
+		priceID = p.config.PriceBusinessID
 	case domain.PlanProfessional:
-		priceID = os.Getenv("STRIPE_PRICE_PROFESSIONAL_ID")
+		priceID = p.config.PriceProID
 	default:
 		return CreateCheckoutSessionOutput{}, domain.ErrInvalidPlan
 	}
@@ -72,26 +64,7 @@ func (p *paymentService) CreateCheckoutSession(ctx context.Context, userID, emai
 		return CreateCheckoutSessionOutput{}, domain.ErrInvalidPlan
 	}
 
-	params := &stripe.CheckoutSessionParams{
-		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
-		Mode:               stripe.String("subscription"),
-		LineItems: []*stripe.CheckoutSessionLineItemParams{
-			{
-				Price:    stripe.String(priceID),
-				Quantity: stripe.Int64(int64(input.Quantity)),
-			},
-		},
-		SuccessURL:    stripe.String(p.appUrl + "/payment/success?session_id={CHECKOUT_SESSION_ID}"),
-		CancelURL:     stripe.String(p.appUrl + "/payment/cancel"),
-		CustomerEmail: stripe.String(email),
-		Metadata: map[string]string{
-			"user_id":  userID,
-			"plan":     string(input.Plan),
-			"quantity": strconv.Itoa(input.Quantity),
-		},
-	}
-
-	sess, err := session.New(params)
+	sess, err := p.provider.CreateCheckoutSession(email, priceID, userID, string(input.Plan), input.Quantity)
 	if err != nil {
 		logger.Error("failed to create Stripe checkout session", map[string]interface{}{
 			"user_id": userID,
@@ -107,44 +80,34 @@ func (p *paymentService) CreateCheckoutSession(ctx context.Context, userID, emai
 	}, nil
 }
 
-func (p *paymentService) HandleWebhook(c echo.Context) error {
-	if p.webhookSecret == "" {
-		logger.Error("webhook secret not configured", nil)
-		return c.NoContent(http.StatusServiceUnavailable)
-	}
-
-	body, err := io.ReadAll(c.Request().Body)
+func (p *paymentService) HandleWebhook(r *http.Request) error {
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return fmt.Errorf("%w: invalid request body", domain.ErrWebhook)
 	}
 
-	event, err := webhook.ConstructEventWithOptions(
-		body,
-		c.Request().Header.Get("Stripe-Signature"),
-		p.webhookSecret,
-		webhook.ConstructEventOptions{IgnoreAPIVersionMismatch: true},
-	)
+	event, err := p.provider.ConstructEvent(body, r.Header.Get("Stripe-Signature"))
 	if err != nil {
 		logger.Error("invalid webhook signature", map[string]interface{}{
 			"error": err.Error(),
 		})
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid webhook signature"})
+		return fmt.Errorf("%w: invalid signature", domain.ErrWebhook)
 	}
 
-	ctx := c.Request().Context()
+	ctx := r.Context()
 	if err := p.processWebhookEvent(ctx, event); err != nil {
 		logger.Error("webhook handler failed", map[string]interface{}{
 			"event_type": event.Type,
 			"event_id":   event.ID,
 			"error":      err.Error(),
 		})
-		return c.NoContent(http.StatusInternalServerError)
+		return fmt.Errorf("%w: failed to process event", domain.ErrWebhook)
 	}
 
-	return c.NoContent(http.StatusOK)
+	return nil
 }
 
-func (p *paymentService) processWebhookEvent(ctx context.Context, event stripe.Event) error {
+func (p *paymentService) processWebhookEvent(ctx context.Context, event gostripe.Event) error {
 	switch event.Type {
 	case "checkout.session.completed":
 		return p.handleCheckoutSessionCompleted(ctx, event)
@@ -162,4 +125,3 @@ func (p *paymentService) processWebhookEvent(ctx context.Context, event stripe.E
 		return nil
 	}
 }
-
