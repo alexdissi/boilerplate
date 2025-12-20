@@ -9,6 +9,7 @@ import (
 	"github.com/stripe/stripe-go/v84/webhook"
 )
 
+//go:generate mockgen -destination=../test/mock_provider.go -package=test my_project/internal/payment/client Provider
 type Provider interface {
 	CreateCheckoutSession(email, priceID, userID, plan string, quantity int) (*stripe.CheckoutSession, error)
 	ConstructEvent(body []byte, signature string) (stripe.Event, error)

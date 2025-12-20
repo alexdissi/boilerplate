@@ -80,7 +80,7 @@ func (h *PaymentHandler) CreatePortalSessionHandler(c echo.Context) error {
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrSubscriptionNotFound):
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "User has no subscription"})
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "User has no subscription"})
 		default:
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
 		}
