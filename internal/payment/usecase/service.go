@@ -43,7 +43,7 @@ func (p *paymentService) CreateCheckoutSession(ctx context.Context, userID, emai
 		return CreateCheckoutSessionOutput{}, fmt.Errorf("failed to check existing subscription: %w", err)
 	}
 
-	if existingSub != nil && existingSub.IsActive() {
+	if existingSub != nil && existingSub.IsActive() && existingSub.Plan != domain.PlanFree {
 		return CreateCheckoutSessionOutput{}, domain.ErrUserAlreadySubscribed
 	}
 

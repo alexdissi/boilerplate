@@ -96,7 +96,17 @@ func (p *paymentService) handleInvoicePaymentSucceeded(ctx context.Context, even
 	subID := invoice.Lines.Data[0].Subscription.ID
 	subscription, err := p.subscriptionRepo.GetSubscriptionBySubID(ctx, subID)
 	if err != nil {
-		return fmt.Errorf("failed to find subscription for invoice: %w", err)
+		subscription, err = p.subscriptionRepo.GetSubscriptionByCustomerID(ctx, invoice.Customer.ID)
+		if err != nil {
+			logger.Error("failed to find subscription for invoice by customer ID", map[string]any{
+				"sub_id":      subID,
+				"customer_id": invoice.Customer.ID,
+				"error":       err.Error(),
+			})
+			return nil
+		}
+
+		subscription.SubID = &subID
 	}
 
 	subscription.Status = domain.StatusActive
@@ -111,24 +121,12 @@ func (p *paymentService) handleInvoicePaymentSucceeded(ctx context.Context, even
 
 		if invoice.Lines.Data[0].Subscription != nil && subscription.SubID == nil {
 			subscription.SubID = &invoice.Lines.Data[0].Subscription.ID
-			logger.Info("updated subscription ID from invoice", map[string]any{
-				"user_id": subscription.UserID,
-				"sub_id":  invoice.Lines.Data[0].Subscription.ID,
-			})
 		}
 	}
 
 	if err := p.subscriptionRepo.UpdateSubscription(ctx, subscription); err != nil {
 		return fmt.Errorf("failed to update subscription after payment: %w", err)
 	}
-
-	logger.Info("invoice payment succeeded", map[string]any{
-		"user_id":     subscription.UserID,
-		"plan":        subscription.Plan,
-		"amount":      invoice.AmountPaid,
-		"currency":    invoice.Currency,
-		"customer_id": invoice.Customer.ID,
-	})
 
 	return nil
 }
@@ -149,7 +147,18 @@ func (p *paymentService) handleInvoicePaymentFailed(ctx context.Context, event s
 	subID := invoice.Lines.Data[0].Subscription.ID
 	subscription, err := p.subscriptionRepo.GetSubscriptionBySubID(ctx, subID)
 	if err != nil {
-		return fmt.Errorf("failed to find subscription for failed invoice: %w", err)
+		subscription, err = p.subscriptionRepo.GetSubscriptionByCustomerID(ctx, invoice.Customer.ID)
+		if err != nil {
+			logger.Error("failed to find subscription for failed invoice by customer ID", map[string]any{
+				"sub_id":      subID,
+				"customer_id": invoice.Customer.ID,
+				"error":       err.Error(),
+			})
+
+			return nil
+		}
+
+		subscription.SubID = &subID
 	}
 
 	subscription.Status = domain.StatusPastDue
@@ -178,18 +187,8 @@ func (p *paymentService) handleSubscriptionCreated(ctx context.Context, event st
 		return fmt.Errorf("missing customer in subscription")
 	}
 
-	logger.Info("subscription created webhook received", map[string]any{
-		"sub_id":      sub.ID,
-		"customer_id": sub.Customer.ID,
-		"metadata":    sub.Metadata,
-	})
-
 	existing, err := p.subscriptionRepo.GetSubscriptionByCustomerID(ctx, sub.Customer.ID)
 	if err == nil && existing != nil {
-		logger.Info("found subscription by customer ID, updating", map[string]any{
-			"sub_id":  sub.ID,
-			"user_id": existing.UserID,
-		})
 		existing.SubID = &sub.ID
 		existing.Status = domain.SubscriptionStatus(sub.Status)
 		existing.CurrentPeriodStart = sub.StartDate
@@ -220,10 +219,6 @@ func (p *paymentService) handleSubscriptionCreated(ctx context.Context, event st
 		if userID, ok := sub.Metadata["user_id"]; ok {
 			existing, err = p.subscriptionRepo.GetSubscriptionByUserID(ctx, userID)
 			if err == nil && existing != nil {
-				logger.Info("found subscription by user ID, updating", map[string]any{
-					"sub_id":  sub.ID,
-					"user_id": userID,
-				})
 				existing.SubID = &sub.ID
 				existing.Status = domain.SubscriptionStatus(sub.Status)
 				existing.CurrentPeriodStart = sub.StartDate
@@ -251,12 +246,6 @@ func (p *paymentService) handleSubscriptionCreated(ctx context.Context, event st
 			}
 		}
 	}
-
-	logger.Info("subscription created without metadata or no existing subscription found", map[string]any{
-		"sub_id":      sub.ID,
-		"customer_id": sub.Customer.ID,
-		"metadata":    sub.Metadata,
-	})
 
 	return nil
 }
@@ -316,11 +305,6 @@ func (p *paymentService) handleSubscriptionDeleted(ctx context.Context, event st
 	if err := p.subscriptionRepo.UpdateSubscription(ctx, existing); err != nil {
 		return fmt.Errorf("failed to cancel subscription: %w", err)
 	}
-
-	logger.Info("subscription canceled", map[string]any{
-		"user_id": existing.UserID,
-		"sub_id":  sub.ID,
-	})
 
 	return nil
 }
