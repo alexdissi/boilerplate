@@ -80,6 +80,31 @@ func (p *paymentService) CreateCheckoutSession(ctx context.Context, userID, emai
 	}, nil
 }
 
+func (p *paymentService) CreatePortalSession(ctx context.Context, userID string) (CreatePortalSessionOutput, error) {
+	sub, err := p.subscriptionRepo.GetSubscriptionByUserID(ctx, userID)
+	if err != nil {
+		return CreatePortalSessionOutput{}, fmt.Errorf("failed to get subscription: %w", err)
+	}
+
+	if sub == nil || sub.CusID == nil || *sub.CusID == "" {
+		return CreatePortalSessionOutput{}, domain.ErrSubscriptionNotFound
+	}
+
+	portalSession, err := p.provider.CreatePortalSession(*sub.CusID)
+	if err != nil {
+		logger.Error("failed to create portal session", map[string]interface{}{
+			"user_id":     userID,
+			"customer_id": *sub.CusID,
+			"error":       err.Error(),
+		})
+		return CreatePortalSessionOutput{}, fmt.Errorf("failed to create portal session")
+	}
+
+	return CreatePortalSessionOutput{
+		URL: portalSession.URL,
+	}, nil
+}
+
 func (p *paymentService) HandleWebhook(r *http.Request) error {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {

@@ -193,7 +193,9 @@ func (p *paymentService) handleSubscriptionCreated(ctx context.Context, event st
 		existing.SubID = &sub.ID
 		existing.Status = domain.SubscriptionStatus(sub.Status)
 		existing.CurrentPeriodStart = sub.StartDate
-		existing.CurrentPeriodEnd = sub.EndedAt
+		if sub.EndedAt != 0 {
+			existing.CurrentPeriodEnd = sub.EndedAt
+		}
 		existing.CancelAtPeriodEnd = sub.CancelAtPeriodEnd
 		existing.UpdatedAt = time.Now().Unix()
 
@@ -225,7 +227,9 @@ func (p *paymentService) handleSubscriptionCreated(ctx context.Context, event st
 				existing.SubID = &sub.ID
 				existing.Status = domain.SubscriptionStatus(sub.Status)
 				existing.CurrentPeriodStart = sub.StartDate
-				existing.CurrentPeriodEnd = sub.EndedAt
+				if sub.EndedAt != 0 {
+					existing.CurrentPeriodEnd = sub.EndedAt
+				}
 				existing.CancelAtPeriodEnd = sub.CancelAtPeriodEnd
 				existing.UpdatedAt = time.Now().Unix()
 
@@ -271,7 +275,9 @@ func (p *paymentService) handleSubscriptionUpdated(ctx context.Context, event st
 	existing.SubID = &sub.ID
 	existing.Status = domain.SubscriptionStatus(sub.Status)
 	existing.CurrentPeriodStart = sub.StartDate
-	existing.CurrentPeriodEnd = sub.EndedAt
+	if sub.EndedAt != 0 {
+		existing.CurrentPeriodEnd = sub.EndedAt
+	}
 	existing.CancelAtPeriodEnd = sub.CancelAtPeriodEnd
 	existing.UpdatedAt = time.Now().Unix()
 
