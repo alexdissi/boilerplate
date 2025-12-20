@@ -30,7 +30,7 @@ func (u *userUsecase) GetUserProfile(ctx context.Context, userID string) (UserPr
 	user, err := u.userRepo.GetUserByID(ctx, userUUID)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
-			logger.Error("user not found")
+			logger.Error("user not found", err)
 			return UserProfileResponse{}, domain.ErrUserNotFound
 		}
 		return UserProfileResponse{}, err
