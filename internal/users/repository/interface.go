@@ -11,4 +11,5 @@ import (
 //go:generate mockgen -destination=../test/mock_user_repository.go -package=test my_project/internal/users/repository UserRepository
 type UserRepository interface {
 	GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.User, error)
+	UpdateUser(ctx context.Context, user *domain.User) (*domain.User, error)
 }

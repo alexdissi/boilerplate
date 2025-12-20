@@ -48,3 +48,37 @@ func (s *UserStore) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.
 
 	return user, nil
 }
+
+func (s *UserStore) UpdateUser(ctx context.Context, user *domain.User) (*domain.User, error) {
+	query := `
+		UPDATE users
+		SET email = $2, first_name = $3, last_name = $4
+		WHERE id = $1
+		RETURNING id, email, first_name, last_name, profile_picture,
+				  last_login_at, is_active`
+
+	updatedUser := &domain.User{}
+	err := s.db.Pool().QueryRow(ctx, query,
+		user.ID,
+		user.Email,
+		user.FirstName,
+		user.LastName,
+	).Scan(
+		&updatedUser.ID,
+		&updatedUser.Email,
+		&updatedUser.FirstName,
+		&updatedUser.LastName,
+		&updatedUser.ProfilePicture,
+		&updatedUser.LastLoginAt,
+		&updatedUser.IsActive,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrUserNotFound
+		}
+		return nil, err
+	}
+
+	return updatedUser, nil
+}

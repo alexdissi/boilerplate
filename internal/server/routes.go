@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -113,8 +114,9 @@ func (s *Server) setupPaymentRoutes(apiGroup *echo.Group) {
 func (s *Server) setupUsersRoutes(apiGroup *echo.Group) {
 	userStore := usersRepository.NewUserStore(s.db)
 	usersUseCase := usersUsecase.NewUserUsecase(userStore)
-	usersHandler := usersHandler.NewUserHandler(usersUseCase)
+	validator := validator.New()
+	usersHandler := usersHandler.NewUserHandler(usersUseCase, validator)
 
-	usersGroup := apiGroup.Group("/users")
+	usersGroup := apiGroup.Group("/users", sessionMiddleware.CookieSessionMiddleware())
 	usersHandler.Bind(usersGroup)
 }
