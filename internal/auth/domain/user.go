@@ -2,6 +2,7 @@ package domain
 
 import (
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -13,7 +14,7 @@ type UserAuth struct {
 	FirstName      string
 	LastName       string
 	ProfilePicture string
-	LastLoginAt    *string
+	LastLoginAt    *time.Time
 	IsActive       bool
 	GoogleID       string
 	OAuthProvider  OAuthProvider

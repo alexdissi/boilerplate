@@ -15,11 +15,11 @@ const (
 type SubscriptionStatus string
 
 const (
-	StatusActive   SubscriptionStatus = "active"
-	StatusCanceled SubscriptionStatus = "canceled"
-	StatusPending  SubscriptionStatus = "pending"
-	StatusTrialing SubscriptionStatus = "trialing"
-	StatusPastDue  SubscriptionStatus = "past_due"
+	StatusActive   SubscriptionStatus = "ACTIVE"
+	StatusCanceled SubscriptionStatus = "CANCELED"
+	StatusPending  SubscriptionStatus = "PENDING"
+	StatusTrialing SubscriptionStatus = "TRIALING"
+	StatusPastDue  SubscriptionStatus = "PAST_DUE"
 )
 
 type Subscription struct {
