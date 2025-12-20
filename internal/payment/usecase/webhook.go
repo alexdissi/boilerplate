@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"my_project/internal/payment/domain"
 	"my_project/pkg/logger"
@@ -63,8 +64,12 @@ func (p *paymentService) handleCheckoutSessionCompleted(ctx context.Context, eve
 	if createErr := p.subscriptionRepo.CreateSubscription(ctx, subscription); createErr != nil {
 		existing, err := p.subscriptionRepo.GetSubscriptionByUserID(ctx, subscription.UserID.String())
 		if err != nil {
-			return fmt.Errorf("failed to find existing subscription: %w", err)
+			if errors.Is(err, domain.ErrSubscriptionNotFound) {
+				return fmt.Errorf("failed to create subscription and no existing subscription found: %w", createErr)
+			}
+			return fmt.Errorf("database error while looking up existing subscription: %w", err)
 		}
+
 		existing.CusID = subscription.CusID
 		existing.Status = domain.StatusPending
 		existing.UpdatedAt = time.Now().Unix()
@@ -72,13 +77,6 @@ func (p *paymentService) handleCheckoutSessionCompleted(ctx context.Context, eve
 			return fmt.Errorf("failed to update existing subscription after checkout: %w", updateErr)
 		}
 	}
-
-	logger.Info("checkout session completed and subscription created/updated", map[string]any{
-		"user_id":     subscription.UserID,
-		"plan":        subscription.Plan,
-		"customer_id": subscription.CusID,
-	})
-
 	return nil
 }
 
@@ -320,4 +318,3 @@ func (p *paymentService) handleSubscriptionDeleted(ctx context.Context, event st
 
 	return nil
 }
-
