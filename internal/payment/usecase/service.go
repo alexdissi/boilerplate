@@ -10,13 +10,12 @@ import (
 	"my_project/internal/payment/repository"
 	"my_project/pkg/logger"
 	"net/http"
-
-	gostripe "github.com/stripe/stripe-go/v84"
 )
 
 type paymentService struct {
 	subscriptionRepo repository.SubscriptionRepository
 	provider         client.Provider
+	webhookService   *WebhookService
 	config           Config
 }
 
@@ -25,10 +24,16 @@ type Config struct {
 	PriceBusinessID string
 }
 
-func NewPaymentUsecase(subscriptionRepo repository.SubscriptionRepository, provider client.Provider, config Config) PaymentUsecase {
+func NewPaymentUsecase(
+	subscriptionRepo repository.SubscriptionRepository,
+	provider client.Provider,
+	config Config,
+) PaymentUsecase {
+	webhookService := NewWebhookService(subscriptionRepo, config)
 	return &paymentService{
 		subscriptionRepo: subscriptionRepo,
 		provider:         provider,
+		webhookService:   webhookService,
 		config:           config,
 	}
 }
@@ -47,30 +52,14 @@ func (p *paymentService) CreateCheckoutSession(ctx context.Context, userID, emai
 		return CreateCheckoutSessionOutput{}, domain.ErrUserAlreadySubscribed
 	}
 
-	var priceID string
-	switch input.Plan {
-	case domain.PlanBusiness:
-		priceID = p.config.PriceBusinessID
-	case domain.PlanProfessional:
-		priceID = p.config.PriceProID
-	default:
-		return CreateCheckoutSessionOutput{}, domain.ErrInvalidPlan
-	}
-
-	if priceID == "" {
-		logger.Error("missing price ID for plan", map[string]any{
-			"plan": input.Plan,
-		})
-		return CreateCheckoutSessionOutput{}, domain.ErrInvalidPlan
+	priceID, err := p.priceIDFromPlan(input.Plan)
+	if err != nil {
+		return CreateCheckoutSessionOutput{}, err
 	}
 
 	sess, err := p.provider.CreateCheckoutSession(email, priceID, userID, string(input.Plan), input.Quantity)
 	if err != nil {
-		logger.Error("failed to create Stripe checkout session", map[string]interface{}{
-			"user_id": userID,
-			"plan":    input.Plan,
-			"error":   err.Error(),
-		})
+		logger.Error(fmt.Sprintf("failed to create Stripe checkout session. user_id: %s, plan: %s, err: %s", userID, input.Plan, err.Error()))
 		return CreateCheckoutSessionOutput{}, fmt.Errorf("failed to create checkout session")
 	}
 
@@ -92,11 +81,7 @@ func (p *paymentService) CreatePortalSession(ctx context.Context, userID string)
 
 	portalSession, err := p.provider.CreatePortalSession(*sub.CusID)
 	if err != nil {
-		logger.Error("failed to create portal session", map[string]interface{}{
-			"user_id":     userID,
-			"customer_id": *sub.CusID,
-			"error":       err.Error(),
-		})
+		logger.Error(fmt.Sprintf("failed to create portal session. user_id: %s, customer_id: %s, err: %s", userID, *sub.CusID, err.Error()))
 		return CreatePortalSessionOutput{}, fmt.Errorf("failed to create portal session")
 	}
 
@@ -113,40 +98,31 @@ func (p *paymentService) HandleWebhook(r *http.Request) error {
 
 	event, err := p.provider.ConstructEvent(body, r.Header.Get("Stripe-Signature"))
 	if err != nil {
-		logger.Error("invalid webhook signature", map[string]interface{}{
-			"error": err.Error(),
-		})
+		logger.Error(fmt.Sprintf("invalid webhook signature. err: %s", err.Error()))
 		return fmt.Errorf("%w: invalid signature", domain.ErrWebhook)
 	}
 
-	ctx := r.Context()
-	if err := p.processWebhookEvent(ctx, event); err != nil {
-		logger.Error("webhook handler failed", map[string]interface{}{
-			"event_type": event.Type,
-			"event_id":   event.ID,
-			"error":      err.Error(),
-		})
+	if err := p.webhookService.ProcessEvent(r.Context(), event); err != nil {
+		logger.Error(fmt.Sprintf("failed to process webhook event. type: %s, err: %s", event.Type, err.Error()))
 		return fmt.Errorf("%w: failed to process event", domain.ErrWebhook)
 	}
 
 	return nil
 }
 
-func (p *paymentService) processWebhookEvent(ctx context.Context, event gostripe.Event) error {
-	switch event.Type {
-	case "checkout.session.completed":
-		return p.handleCheckoutSessionCompleted(ctx, event)
-	case "invoice.payment_succeeded":
-		return p.handleInvoicePaymentSucceeded(ctx, event)
-	case "invoice.payment_failed":
-		return p.handleInvoicePaymentFailed(ctx, event)
-	case "customer.subscription.created":
-		return p.handleSubscriptionCreated(ctx, event)
-	case "customer.subscription.updated":
-		return p.handleSubscriptionUpdated(ctx, event)
-	case "customer.subscription.deleted":
-		return p.handleSubscriptionDeleted(ctx, event)
+func (p *paymentService) priceIDFromPlan(plan domain.SubscriptionPlan) (string, error) {
+	var priceID string
+	switch plan {
+	case domain.PlanBusiness:
+		priceID = p.config.PriceBusinessID
+	case domain.PlanProfessional:
+		priceID = p.config.PriceProID
 	default:
-		return nil
+		return "", domain.ErrInvalidPlan
 	}
+	if priceID == "" {
+		logger.Error(fmt.Sprintf("missing price ID for plan: %s", plan))
+		return "", domain.ErrInvalidPlan
+	}
+	return priceID, nil
 }
