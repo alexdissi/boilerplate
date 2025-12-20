@@ -14,8 +14,8 @@ const (
 type OAuthProvider string
 
 const (
-	AuthProviderEmail  OAuthProvider = "email"
-	AuthProviderGoogle OAuthProvider = "google"
+	AuthProviderEmail  OAuthProvider = "EMAIL"
+	AuthProviderGoogle OAuthProvider = "GOOGLE"
 )
 
 var (
