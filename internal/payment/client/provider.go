@@ -4,13 +4,15 @@ import (
 	"strconv"
 
 	"github.com/stripe/stripe-go/v84"
-	"github.com/stripe/stripe-go/v84/checkout/session"
+	billingportalsession "github.com/stripe/stripe-go/v84/billingportal/session"
+	checkoutsession "github.com/stripe/stripe-go/v84/checkout/session"
 	"github.com/stripe/stripe-go/v84/webhook"
 )
 
 type Provider interface {
 	CreateCheckoutSession(email, priceID, userID, plan string, quantity int) (*stripe.CheckoutSession, error)
 	ConstructEvent(body []byte, signature string) (stripe.Event, error)
+	CreatePortalSession(customerID string) (*stripe.BillingPortalSession, error)
 }
 
 type stripeProvider struct {
@@ -53,7 +55,7 @@ func (s *stripeProvider) CreateCheckoutSession(email, priceID, userID, plan stri
 		},
 	}
 
-	return session.New(params)
+	return checkoutsession.New(params)
 }
 
 func (s *stripeProvider) ConstructEvent(body []byte, signature string) (stripe.Event, error) {
@@ -63,4 +65,12 @@ func (s *stripeProvider) ConstructEvent(body []byte, signature string) (stripe.E
 		s.webhookSecret,
 		webhook.ConstructEventOptions{IgnoreAPIVersionMismatch: true},
 	)
+}
+
+func (s *stripeProvider) CreatePortalSession(customerID string) (*stripe.BillingPortalSession, error) {
+	params := &stripe.BillingPortalSessionParams{
+		Customer:  stripe.String(customerID),
+		ReturnURL: stripe.String(s.appUrl),
+	}
+	return billingportalsession.New(params)
 }

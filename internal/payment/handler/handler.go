@@ -22,6 +22,8 @@ func NewPaymentHandler(u usecase.PaymentUsecase) *PaymentHandler {
 
 func (h *PaymentHandler) Bind(e *echo.Group) {
 	e.POST("/checkout-session", h.CreateCheckoutSessionHandler, middleware.CookieSessionMiddleware())
+	e.GET("/portal-session", h.CreatePortalSessionHandler, middleware.CookieSessionMiddleware())
+
 	e.POST("/webhook", h.HandleWebhook)
 }
 
@@ -65,4 +67,24 @@ func (h *PaymentHandler) HandleWebhook(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	return c.NoContent(http.StatusOK)
+}
+
+func (h *PaymentHandler) CreatePortalSessionHandler(c echo.Context) error {
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+	}
+
+	ctx := c.Request().Context()
+	output, err := h.usecase.CreatePortalSession(ctx, userID)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrSubscriptionNotFound):
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "User has no subscription"})
+		default:
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+		}
+	}
+
+	return c.JSON(http.StatusOK, output)
 }

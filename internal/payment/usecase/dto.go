@@ -11,3 +11,7 @@ type CreateCheckoutSessionOutput struct {
 	SessionID string `json:"session_id"`
 	URL       string `json:"url"`
 }
+
+type CreatePortalSessionOutput struct {
+	URL string `json:"url"`
+}
