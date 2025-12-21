@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"errors"
+	"my_project/internal/users/domain"
 	"my_project/internal/users/usecase"
 	"net/http"
 
@@ -23,6 +25,7 @@ func NewUserHandler(u usecase.UserUsecase, v *validator.Validate) *UserHandler {
 func (h *UserHandler) Bind(e *echo.Group) {
 	e.GET("/me", h.GetUserProfile)
 	e.PATCH("/me", h.UpdateUserProfile)
+	e.POST("/change-password", h.ChangePassword)
 }
 
 func (h *UserHandler) GetUserProfile(c echo.Context) error {
@@ -65,4 +68,35 @@ func (h *UserHandler) UpdateUserProfile(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, output)
+}
+
+func (h *UserHandler) ChangePassword(c echo.Context) error {
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+	}
+
+	var req usecase.ChangePasswordRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
+	}
+
+	if err := h.validator.Struct(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Validation failed: " + err.Error()})
+	}
+
+	if req.CurrentPassword == req.NewPassword {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "New password must be different from current password"})
+	}
+
+	ctx := c.Request().Context()
+	err := h.usecase.ChangePassword(ctx, userID, req)
+	if err != nil {
+		if errors.Is(err, domain.ErrInvalidCurrentPassword) {
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Current password is incorrect"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"message": "Password changed successfully"})
 }

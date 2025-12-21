@@ -14,4 +14,5 @@ type User struct {
 	ProfilePicture string     `json:"profile_picture"`
 	LastLoginAt    *time.Time `json:"last_login_at"`
 	IsActive       bool       `json:"is_active"`
+	PasswordHash   string     `json:"-"`
 }

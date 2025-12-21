@@ -7,6 +7,7 @@ import (
 	"my_project/internal/users/domain"
 	"my_project/internal/users/repository"
 	"my_project/pkg/logger"
+	"my_project/pkg/password"
 
 	"github.com/google/uuid"
 )
@@ -71,4 +72,41 @@ func (u *userUsecase) UpdateUserProfile(ctx context.Context, userID string, req 
 	}
 
 	return ToUserProfileResponse(updatedUser), nil
+}
+
+func (u *userUsecase) ChangePassword(ctx context.Context, userID string, req ChangePasswordRequest) error {
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return domain.ErrInvalidUserID
+	}
+
+	user, err := u.userRepo.GetUserByID(ctx, userUUID)
+	if err != nil {
+		logger.Error("failed to get user for password change", err)
+		return errors.New("user not found")
+	}
+
+	passwordMatch, err := password.ComparePassword(user.PasswordHash, req.CurrentPassword)
+	if err != nil {
+		logger.Error("password comparison error", err)
+		return errors.New("password verification failed")
+	}
+
+	if !passwordMatch {
+		return domain.ErrInvalidCurrentPassword
+	}
+
+	hashedPassword, err := password.HashPassword(req.NewPassword)
+	if err != nil {
+		logger.Error("failed to hash new password", err)
+		return errors.New("failed to process new password")
+	}
+
+	err = u.userRepo.UpdatePassword(ctx, userUUID, hashedPassword)
+	if err != nil {
+		logger.Error("failed to update password", err)
+		return errors.New("failed to update password")
+	}
+
+	return nil
 }
