@@ -14,9 +14,9 @@ import (
 	"my_project/internal/users/usecase"
 	"my_project/pkg/logger"
 	"my_project/pkg/password"
-	passwordValidator "my_project/pkg/validator"
+	"my_project/pkg/validator"
 
-	"github.com/go-playground/validator/v10"
+	validatorV10 "github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -32,7 +32,7 @@ func TestUpdateUserProfile_Usecase(t *testing.T) {
 	userUsecase := usecase.NewUserUsecase(mockRepo)
 
 	ctx := context.Background()
-	userUUID := uuid.New() // UUID fixe pour le test
+	userUUID := uuid.New()
 	userID := userUUID.String()
 
 	existingUser := &domain.User{
@@ -42,73 +42,58 @@ func TestUpdateUserProfile_Usecase(t *testing.T) {
 		LastName:  "Name",
 	}
 
-	t.Run("success - update email only", func(t *testing.T) {
-		newEmail := "new@example.com"
-		req := usecase.UpdateUserRequest{
-			Email: &newEmail,
+	t.Run("success scenarios", func(t *testing.T) {
+		tests := []struct {
+			name string
+			req  usecase.UpdateUserRequest
+			want usecase.UserProfileResponse
+		}{
+			{
+				name: "update email only",
+				req:  usecase.UpdateUserRequest{Email: stringPtr("new@example.com")},
+				want: usecase.UserProfileResponse{Email: "new@example.com", FirstName: "Old", LastName: "Name"},
+			},
+			{
+				name: "update first name only",
+				req:  usecase.UpdateUserRequest{FirstName: stringPtr("NewFirst")},
+				want: usecase.UserProfileResponse{Email: "old@example.com", FirstName: "NewFirst", LastName: "Name"},
+			},
+			{
+				name: "update last name only",
+				req:  usecase.UpdateUserRequest{LastName: stringPtr("NewLast")},
+				want: usecase.UserProfileResponse{Email: "old@example.com", FirstName: "Old", LastName: "NewLast"},
+			},
 		}
 
-		updatedUser := *existingUser
-		updatedUser.Email = newEmail
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				updatedUser := *existingUser
+				if tt.req.Email != nil {
+					updatedUser.Email = *tt.req.Email
+				}
+				if tt.req.FirstName != nil {
+					updatedUser.FirstName = *tt.req.FirstName
+				}
+				if tt.req.LastName != nil {
+					updatedUser.LastName = *tt.req.LastName
+				}
 
-		mockRepo.EXPECT().GetUserByID(gomock.Any(), gomock.Eq(userUUID)).Return(existingUser, nil)
-		mockRepo.EXPECT().UpdateUser(gomock.Any(), gomock.Any()).Return(&updatedUser, nil)
+				mockRepo.EXPECT().GetUserByID(gomock.Any(), userUUID).Return(existingUser, nil)
+				mockRepo.EXPECT().UpdateUser(gomock.Any(), gomock.Any()).Return(&updatedUser, nil)
 
-		result, err := userUsecase.UpdateUserProfile(ctx, userID, req)
+				result, err := userUsecase.UpdateUserProfile(ctx, userID, tt.req)
 
-		require.NoError(t, err)
-		assert.Equal(t, newEmail, result.Email)
-		assert.Equal(t, existingUser.FirstName, result.FirstName)
-		assert.Equal(t, existingUser.LastName, result.LastName)
-	})
-
-	t.Run("success - update first name only", func(t *testing.T) {
-		newFirstName := "NewFirst"
-		req := usecase.UpdateUserRequest{
-			FirstName: &newFirstName,
+				require.NoError(t, err)
+				assert.Equal(t, updatedUser.Email, result.Email)
+				assert.Equal(t, updatedUser.FirstName, result.FirstName)
+				assert.Equal(t, updatedUser.LastName, result.LastName)
+			})
 		}
-
-		updatedUser := *existingUser
-		updatedUser.FirstName = newFirstName
-
-		mockRepo.EXPECT().GetUserByID(gomock.Any(), gomock.Eq(userUUID)).Return(existingUser, nil)
-		mockRepo.EXPECT().UpdateUser(gomock.Any(), gomock.Any()).Return(&updatedUser, nil)
-
-		result, err := userUsecase.UpdateUserProfile(ctx, userID, req)
-
-		require.NoError(t, err)
-		assert.Equal(t, existingUser.Email, result.Email)
-		assert.Equal(t, newFirstName, result.FirstName)
-		assert.Equal(t, existingUser.LastName, result.LastName)
-	})
-
-	t.Run("success - update last name only", func(t *testing.T) {
-		newLastName := "NewLast"
-		req := usecase.UpdateUserRequest{
-			LastName: &newLastName,
-		}
-
-		updatedUser := *existingUser
-		updatedUser.LastName = newLastName
-
-		mockRepo.EXPECT().GetUserByID(gomock.Any(), gomock.Eq(userUUID)).Return(existingUser, nil)
-		mockRepo.EXPECT().UpdateUser(gomock.Any(), gomock.Any()).Return(&updatedUser, nil)
-
-		result, err := userUsecase.UpdateUserProfile(ctx, userID, req)
-
-		require.NoError(t, err)
-		assert.Equal(t, existingUser.Email, result.Email)
-		assert.Equal(t, existingUser.FirstName, result.FirstName)
-		assert.Equal(t, newLastName, result.LastName)
 	})
 
 	t.Run("error - invalid user ID", func(t *testing.T) {
-		req := usecase.UpdateUserRequest{
-			Email: stringPtr("test@example.com"),
-		}
-
+		req := usecase.UpdateUserRequest{Email: stringPtr("test@example.com")}
 		_, err := userUsecase.UpdateUserProfile(ctx, "invalid-uuid", req)
-
 		assert.Error(t, err)
 		assert.Equal(t, domain.ErrInvalidUserID, err)
 	})
@@ -119,19 +104,14 @@ func TestUpdateUserProfile_Handler(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockUsecase := NewMockUserUsecase(ctrl)
-	validator := validator.New()
-	userHandler := handler.NewUserHandler(mockUsecase, validator)
+	validate := validatorV10.New()
+	userHandler := handler.NewUserHandler(mockUsecase, validate)
 
 	e := echo.New()
-
 	userID := uuid.New().String()
-	validEmail := "test@example.com"
 
-	t.Run("success - update email only", func(t *testing.T) {
-		reqBody := map[string]interface{}{
-			"email": validEmail,
-		}
-
+	t.Run("success", func(t *testing.T) {
+		reqBody := map[string]string{"email": "test@example.com"}
 		reqJSON, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest(http.MethodPatch, "/users/me", bytes.NewBuffer(reqJSON))
 		req.Header.Set("Content-Type", "application/json")
@@ -139,19 +119,10 @@ func TestUpdateUserProfile_Handler(t *testing.T) {
 		c := e.NewContext(req, rec)
 		c.Set("user_id", userID)
 
-		expectedResponse := usecase.UserProfileResponse{
-			ID:        userID,
-			Email:     validEmail,
-			FirstName: "Old",
-			LastName:  "Name",
-		}
-
-		mockUsecase.EXPECT().
-			UpdateUserProfile(gomock.Any(), userID, gomock.Any()).
-			Return(expectedResponse, nil)
+		expectedResponse := usecase.UserProfileResponse{ID: userID, Email: "test@example.com"}
+		mockUsecase.EXPECT().UpdateUserProfile(gomock.Any(), userID, gomock.Any()).Return(expectedResponse, nil)
 
 		err := userHandler.UpdateUserProfile(c)
-
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -161,123 +132,81 @@ func TestUpdateUserProfile_Handler(t *testing.T) {
 		assert.Equal(t, expectedResponse.Email, response.Email)
 	})
 
-	t.Run("error - unauthorized (no user_id)", func(t *testing.T) {
-		reqBody := map[string]interface{}{
-			"email": validEmail,
+	t.Run("error scenarios", func(t *testing.T) {
+		tests := []struct {
+			name          string
+			reqBody       any
+			expectedCode  int
+			expectedError string
+			setupMock     func()
+		}{
+			{
+				name:          "unauthorized",
+				reqBody:       map[string]string{"email": "test@example.com"},
+				expectedCode:  http.StatusUnauthorized,
+				expectedError: "Unauthorized",
+			},
+			{
+				name:          "invalid email",
+				reqBody:       map[string]string{"email": "invalid-email"},
+				expectedCode:  http.StatusBadRequest,
+				expectedError: "Validation failed",
+			},
+			{
+				name:          "first name too short",
+				reqBody:       map[string]string{"first_name": "a"},
+				expectedCode:  http.StatusBadRequest,
+				expectedError: "Validation failed",
+			},
+			{
+				name:          "no fields provided",
+				reqBody:       map[string]any{},
+				expectedCode:  http.StatusBadRequest,
+				expectedError: "At least one field must be provided",
+			},
+			{
+				name:          "usecase error",
+				reqBody:       map[string]string{"email": "test@example.com"},
+				expectedCode:  http.StatusInternalServerError,
+				expectedError: "usecase error",
+				setupMock: func() {
+					mockUsecase.EXPECT().UpdateUserProfile(gomock.Any(), userID, gomock.Any()).
+						Return(usecase.UserProfileResponse{}, errors.New("usecase error"))
+				},
+			},
 		}
 
-		reqJSON, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest(http.MethodPatch, "/users/me", bytes.NewBuffer(reqJSON))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				if tt.setupMock != nil {
+					tt.setupMock()
+				}
 
-		err := userHandler.UpdateUserProfile(c)
+				reqJSON, _ := json.Marshal(tt.reqBody)
+				req := httptest.NewRequest(http.MethodPatch, "/users/me", bytes.NewBuffer(reqJSON))
+				req.Header.Set("Content-Type", "application/json")
+				rec := httptest.NewRecorder()
+				c := e.NewContext(req, rec)
+				if tt.name != "unauthorized" {
+					c.Set("user_id", userID)
+				}
 
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+				err := userHandler.UpdateUserProfile(c)
+				require.NoError(t, err)
+				assert.Equal(t, tt.expectedCode, rec.Code)
 
-		var response map[string]string
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Equal(t, "Unauthorized", response["error"])
-	})
-
-	t.Run("error - validation failed (invalid email)", func(t *testing.T) {
-		reqBody := map[string]interface{}{
-			"email": "invalid-email",
+				var response map[string]string
+				err = json.Unmarshal(rec.Body.Bytes(), &response)
+				require.NoError(t, err)
+				assert.Contains(t, response["error"], tt.expectedError)
+			})
 		}
-
-		reqJSON, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest(http.MethodPatch, "/users/me", bytes.NewBuffer(reqJSON))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.Set("user_id", userID)
-
-		err := userHandler.UpdateUserProfile(c)
-
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
-
-		var response map[string]string
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Contains(t, response["error"], "Validation failed")
-	})
-
-	t.Run("error - validation failed (first name too short)", func(t *testing.T) {
-		reqBody := map[string]interface{}{
-			"first_name": "a", // Less than 2 characters
-		}
-
-		reqJSON, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest(http.MethodPatch, "/users/me", bytes.NewBuffer(reqJSON))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.Set("user_id", userID)
-
-		err := userHandler.UpdateUserProfile(c)
-
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
-	})
-
-	t.Run("error - no fields provided", func(t *testing.T) {
-		reqBody := map[string]interface{}{}
-
-		reqJSON, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest(http.MethodPatch, "/users/me", bytes.NewBuffer(reqJSON))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.Set("user_id", userID)
-
-		err := userHandler.UpdateUserProfile(c)
-
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
-
-		var response map[string]string
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Equal(t, "At least one field must be provided", response["error"])
-	})
-
-	t.Run("error - usecase returns error", func(t *testing.T) {
-		reqBody := map[string]interface{}{
-			"email": validEmail,
-		}
-
-		reqJSON, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest(http.MethodPatch, "/users/me", bytes.NewBuffer(reqJSON))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.Set("user_id", userID)
-
-		mockUsecase.EXPECT().
-			UpdateUserProfile(gomock.Any(), userID, gomock.Any()).
-			Return(usecase.UserProfileResponse{}, errors.New("usecase error"))
-
-		err := userHandler.UpdateUserProfile(c)
-
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusInternalServerError, rec.Code)
-
-		var response map[string]string
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Equal(t, "usecase error", response["error"])
 	})
 }
 
 func TestChangePassword_Usecase(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-
-	// Initialize logger for tests
 	logger.Init()
 
 	mockRepo := NewMockUserRepository(ctrl)
@@ -286,7 +215,6 @@ func TestChangePassword_Usecase(t *testing.T) {
 	ctx := context.Background()
 	userUUID := uuid.New()
 	userID := userUUID.String()
-
 	currentPassword := "oldPassword123!"
 	newPassword := "newPassword456!"
 
@@ -301,73 +229,80 @@ func TestChangePassword_Usecase(t *testing.T) {
 		PasswordHash: hashedCurrentPassword,
 	}
 
-	t.Run("success - password changed", func(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
 		req := usecase.ChangePasswordRequest{
 			CurrentPassword: currentPassword,
 			NewPassword:     newPassword,
 		}
 
-		mockRepo.EXPECT().GetUserByID(gomock.Any(), gomock.Eq(userUUID)).Return(existingUser, nil)
-		mockRepo.EXPECT().UpdatePassword(gomock.Any(), gomock.Eq(userUUID), gomock.Any()).Return(nil)
+		mockRepo.EXPECT().GetUserByID(gomock.Any(), userUUID).Return(existingUser, nil)
+		mockRepo.EXPECT().UpdatePassword(gomock.Any(), userUUID, gomock.Any()).Return(nil)
 
 		err := userUsecase.ChangePassword(ctx, userID, req)
-
 		require.NoError(t, err)
 	})
 
-	t.Run("error - invalid user ID", func(t *testing.T) {
-		req := usecase.ChangePasswordRequest{
-			CurrentPassword: currentPassword,
-			NewPassword:     newPassword,
+	t.Run("error scenarios", func(t *testing.T) {
+		tests := []struct {
+			name          string
+			userIDForTest string
+			req           usecase.ChangePasswordRequest
+			setupMock     func()
+			expectedError error
+		}{
+			{
+				name:          "invalid user ID",
+				userIDForTest: "invalid-uuid",
+				req:           usecase.ChangePasswordRequest{CurrentPassword: currentPassword, NewPassword: newPassword},
+				expectedError: domain.ErrInvalidUserID,
+			},
+			{
+				name:          "user not found",
+				userIDForTest: userID,
+				req:           usecase.ChangePasswordRequest{CurrentPassword: currentPassword, NewPassword: newPassword},
+				setupMock: func() {
+					mockRepo.EXPECT().GetUserByID(gomock.Any(), userUUID).Return(nil, domain.ErrUserNotFound)
+				},
+				expectedError: domain.ErrUserNotFound,
+			},
+			{
+				name:          "current password incorrect",
+				userIDForTest: userID,
+				req:           usecase.ChangePasswordRequest{CurrentPassword: "wrongPassword", NewPassword: newPassword},
+				setupMock: func() {
+					mockRepo.EXPECT().GetUserByID(gomock.Any(), userUUID).Return(existingUser, nil)
+				},
+				expectedError: domain.ErrInvalidCurrentPassword,
+			},
+			{
+				name:          "failed to update password",
+				userIDForTest: userID,
+				req:           usecase.ChangePasswordRequest{CurrentPassword: currentPassword, NewPassword: newPassword},
+				setupMock: func() {
+					mockRepo.EXPECT().GetUserByID(gomock.Any(), userUUID).Return(existingUser, nil)
+					mockRepo.EXPECT().UpdatePassword(gomock.Any(), userUUID, gomock.Any()).Return(errors.New("database error"))
+				},
+				expectedError: errors.New("failed to update password: database error"),
+			},
 		}
 
-		err := userUsecase.ChangePassword(ctx, "invalid-uuid", req)
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				if tt.setupMock != nil {
+					tt.setupMock()
+				}
 
-		assert.Error(t, err)
-		assert.Equal(t, domain.ErrInvalidUserID, err)
-	})
-
-	t.Run("error - user not found", func(t *testing.T) {
-		req := usecase.ChangePasswordRequest{
-			CurrentPassword: currentPassword,
-			NewPassword:     newPassword,
+				err := userUsecase.ChangePassword(ctx, tt.userIDForTest, tt.req)
+				assert.Error(t, err)
+				if tt.name == "invalid user ID" {
+					assert.Equal(t, tt.expectedError, err)
+				} else if tt.name == "failed to update password" {
+					assert.Contains(t, err.Error(), "failed to update password")
+				} else {
+					assert.Contains(t, err.Error(), tt.expectedError.Error())
+				}
+			})
 		}
-
-		mockRepo.EXPECT().GetUserByID(gomock.Any(), gomock.Eq(userUUID)).Return(nil, domain.ErrUserNotFound)
-
-		err := userUsecase.ChangePassword(ctx, userID, req)
-
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "user not found")
-	})
-
-	t.Run("error - current password incorrect", func(t *testing.T) {
-		req := usecase.ChangePasswordRequest{
-			CurrentPassword: "wrongPassword",
-			NewPassword:     newPassword,
-		}
-
-		mockRepo.EXPECT().GetUserByID(gomock.Any(), gomock.Eq(userUUID)).Return(existingUser, nil)
-
-		err := userUsecase.ChangePassword(ctx, userID, req)
-
-		assert.Error(t, err)
-		assert.Equal(t, domain.ErrInvalidCurrentPassword, err)
-	})
-
-	t.Run("error - failed to update password", func(t *testing.T) {
-		req := usecase.ChangePasswordRequest{
-			CurrentPassword: currentPassword,
-			NewPassword:     newPassword,
-		}
-
-		mockRepo.EXPECT().GetUserByID(gomock.Any(), gomock.Eq(userUUID)).Return(existingUser, nil)
-		mockRepo.EXPECT().UpdatePassword(gomock.Any(), gomock.Eq(userUUID), gomock.Any()).Return(errors.New("database error"))
-
-		err := userUsecase.ChangePassword(ctx, userID, req)
-
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to update password")
 	})
 }
 
@@ -377,21 +312,18 @@ func TestChangePassword_Handler(t *testing.T) {
 	logger.Init()
 
 	mockUsecase := NewMockUserUsecase(ctrl)
-	validator := validator.New()
-	validator.RegisterValidation("strongpassword", passwordValidator.ValidateStrongPassword)
-
-	userHandler := handler.NewUserHandler(mockUsecase, validator)
+	validate := validatorV10.New()
+	validator.RegisterPasswordValidation(validate)
+	userHandler := handler.NewUserHandler(mockUsecase, validate)
 
 	e := echo.New()
-
 	userID := uuid.New().String()
 
-	t.Run("success - password changed", func(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
 		reqBody := map[string]string{
 			"current_password": "oldPassword123!",
 			"new_password":     "newPassword456!",
 		}
-
 		reqJSON, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest(http.MethodPost, "/users/change-password", bytes.NewBuffer(reqJSON))
 		req.Header.Set("Content-Type", "application/json")
@@ -399,12 +331,9 @@ func TestChangePassword_Handler(t *testing.T) {
 		c := e.NewContext(req, rec)
 		c.Set("user_id", userID)
 
-		mockUsecase.EXPECT().
-			ChangePassword(gomock.Any(), userID, gomock.Any()).
-			Return(nil)
+		mockUsecase.EXPECT().ChangePassword(gomock.Any(), userID, gomock.Any()).Return(nil)
 
 		err := userHandler.ChangePassword(c)
-
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -414,268 +343,109 @@ func TestChangePassword_Handler(t *testing.T) {
 		assert.Equal(t, "Password changed successfully", response["message"])
 	})
 
-	t.Run("error - unauthorized (no user_id)", func(t *testing.T) {
-		reqBody := map[string]string{
-			"current_password": "oldPassword123!",
-			"new_password":     "newPassword456!",
+	t.Run("error scenarios", func(t *testing.T) {
+		tests := []struct {
+			name          string
+			reqBody       any
+			expectedCode  int
+			expectedError string
+			setupMock     func()
+		}{
+			{
+				name:          "unauthorized",
+				reqBody:       map[string]string{"current_password": "old!", "new_password": "new!"},
+				expectedCode:  http.StatusUnauthorized,
+				expectedError: "Unauthorized",
+			},
+			{
+				name:          "missing current password",
+				reqBody:       map[string]string{"new_password": "newPassword456!"},
+				expectedCode:  http.StatusBadRequest,
+				expectedError: "Validation failed",
+			},
+			{
+				name:          "password too short",
+				reqBody:       map[string]string{"current_password": "old!", "new_password": "short"},
+				expectedCode:  http.StatusBadRequest,
+				expectedError: "Validation failed",
+			},
+			{
+				name:          "weak password",
+				reqBody:       map[string]string{"current_password": "old!", "new_password": "weakpassword"},
+				expectedCode:  http.StatusBadRequest,
+				expectedError: "Validation failed",
+			},
+			{
+				name:          "same password",
+				reqBody:       map[string]string{"current_password": "Password123!", "new_password": "Password123!"},
+				expectedCode:  http.StatusBadRequest,
+				expectedError: "New password must be different from current password",
+			},
+			{
+				name:          "invalid JSON",
+				reqBody:       []byte("invalid json"),
+				expectedCode:  http.StatusBadRequest,
+				expectedError: "Invalid request format",
+			},
+			{
+				name:          "current password incorrect",
+				reqBody:       map[string]string{"current_password": "Password123!", "new_password": "newPassword456!"},
+				expectedCode:  http.StatusUnauthorized,
+				expectedError: "Current password is incorrect",
+				setupMock: func() {
+					mockUsecase.EXPECT().ChangePassword(gomock.Any(), userID, gomock.Any()).
+						Return(domain.ErrInvalidCurrentPassword)
+				},
+			},
+			{
+				name:          "usecase error",
+				reqBody:       map[string]string{"current_password": "Password123!", "new_password": "newPassword456!"},
+				expectedCode:  http.StatusInternalServerError,
+				expectedError: "usecase error",
+				setupMock: func() {
+					mockUsecase.EXPECT().ChangePassword(gomock.Any(), userID, gomock.Any()).
+						Return(errors.New("usecase error"))
+				},
+			},
 		}
 
-		reqJSON, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest(http.MethodPost, "/users/change-password", bytes.NewBuffer(reqJSON))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				if tt.setupMock != nil {
+					tt.setupMock()
+				}
 
-		err := userHandler.ChangePassword(c)
+				var req *http.Request
+				switch v := tt.reqBody.(type) {
+				case map[string]string:
+					reqJSON, _ := json.Marshal(v)
+					req = httptest.NewRequest(http.MethodPost, "/users/change-password", bytes.NewBuffer(reqJSON))
+					req.Header.Set("Content-Type", "application/json")
+				case []byte:
+					req = httptest.NewRequest(http.MethodPost, "/users/change-password", bytes.NewBuffer(v))
+					req.Header.Set("Content-Type", "application/json")
+				}
 
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+				rec := httptest.NewRecorder()
+				c := e.NewContext(req, rec)
+				if tt.name != "unauthorized" {
+					c.Set("user_id", userID)
+				}
 
-		var response map[string]string
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Equal(t, "Unauthorized", response["error"])
-	})
+				err := userHandler.ChangePassword(c)
+				require.NoError(t, err)
+				assert.Equal(t, tt.expectedCode, rec.Code)
 
-	t.Run("error - validation failed (missing current password)", func(t *testing.T) {
-		reqBody := map[string]string{
-			"new_password": "newPassword456!",
+				var response map[string]string
+				err = json.Unmarshal(rec.Body.Bytes(), &response)
+				require.NoError(t, err)
+				if tt.name == "same password" || tt.name == "unauthorized" || tt.name == "invalid JSON" {
+					assert.Equal(t, tt.expectedError, response["error"])
+				} else {
+					assert.Contains(t, response["error"], tt.expectedError)
+				}
+			})
 		}
-
-		reqJSON, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest(http.MethodPost, "/users/change-password", bytes.NewBuffer(reqJSON))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.Set("user_id", userID)
-
-		err := userHandler.ChangePassword(c)
-
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
-
-		var response map[string]string
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Contains(t, response["error"], "Validation failed")
-	})
-
-	t.Run("error - validation failed (password too short)", func(t *testing.T) {
-		reqBody := map[string]string{
-			"current_password": "oldPassword123!",
-			"new_password":     "short", // Less than 8 characters
-		}
-
-		reqJSON, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest(http.MethodPost, "/users/change-password", bytes.NewBuffer(reqJSON))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.Set("user_id", userID)
-
-		err := userHandler.ChangePassword(c)
-
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
-
-		var response map[string]string
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Contains(t, response["error"], "Validation failed")
-	})
-
-	t.Run("error - validation failed (password not strong enough)", func(t *testing.T) {
-		reqBody := map[string]string{
-			"current_password": "oldPassword123!",
-			"new_password":     "weakpassword", // No uppercase, numbers or special chars
-		}
-
-		reqJSON, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest(http.MethodPost, "/users/change-password", bytes.NewBuffer(reqJSON))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.Set("user_id", userID)
-
-		err := userHandler.ChangePassword(c)
-
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
-
-		var response map[string]string
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Contains(t, response["error"], "Validation failed")
-	})
-
-	t.Run("error - validation failed (missing uppercase)", func(t *testing.T) {
-		reqBody := map[string]string{
-			"current_password": "oldPassword123!",
-			"new_password":     "weakpass123!", // Missing uppercase
-		}
-
-		reqJSON, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest(http.MethodPost, "/users/change-password", bytes.NewBuffer(reqJSON))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.Set("user_id", userID)
-
-		err := userHandler.ChangePassword(c)
-
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
-
-		var response map[string]string
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Contains(t, response["error"], "Validation failed")
-	})
-
-	t.Run("error - validation failed (missing lowercase)", func(t *testing.T) {
-		reqBody := map[string]string{
-			"current_password": "oldPassword123!",
-			"new_password":     "WEAKPASS123!", // Missing lowercase
-		}
-
-		reqJSON, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest(http.MethodPost, "/users/change-password", bytes.NewBuffer(reqJSON))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.Set("user_id", userID)
-
-		err := userHandler.ChangePassword(c)
-
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
-
-		var response map[string]string
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Contains(t, response["error"], "Validation failed")
-	})
-
-	t.Run("error - validation failed (missing special character)", func(t *testing.T) {
-		reqBody := map[string]string{
-			"current_password": "oldPassword123!",
-			"new_password":     "Weakpass123", // Missing special character
-		}
-
-		reqJSON, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest(http.MethodPost, "/users/change-password", bytes.NewBuffer(reqJSON))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.Set("user_id", userID)
-
-		err := userHandler.ChangePassword(c)
-
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
-
-		var response map[string]string
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Contains(t, response["error"], "Validation failed")
-	})
-
-	t.Run("error - same password", func(t *testing.T) {
-		reqBody := map[string]string{
-			"current_password": "password123!",
-			"new_password":     "password123!",
-		}
-
-		reqJSON, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest(http.MethodPost, "/users/change-password", bytes.NewBuffer(reqJSON))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.Set("user_id", userID)
-
-		err := userHandler.ChangePassword(c)
-
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
-
-		var response map[string]string
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Equal(t, "New password must be different from current password", response["error"])
-	})
-
-	t.Run("error - current password incorrect", func(t *testing.T) {
-		reqBody := map[string]string{
-			"current_password": "wrongPassword",
-			"new_password":     "newPassword456!",
-		}
-
-		reqJSON, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest(http.MethodPost, "/users/change-password", bytes.NewBuffer(reqJSON))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.Set("user_id", userID)
-
-		mockUsecase.EXPECT().
-			ChangePassword(gomock.Any(), userID, gomock.Any()).
-			Return(domain.ErrInvalidCurrentPassword)
-
-		err := userHandler.ChangePassword(c)
-
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusUnauthorized, rec.Code)
-
-		var response map[string]string
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Equal(t, "Current password is incorrect", response["error"])
-	})
-
-	t.Run("error - usecase returns error", func(t *testing.T) {
-		reqBody := map[string]string{
-			"current_password": "oldPassword123!",
-			"new_password":     "newPassword456!",
-		}
-
-		reqJSON, _ := json.Marshal(reqBody)
-		req := httptest.NewRequest(http.MethodPost, "/users/change-password", bytes.NewBuffer(reqJSON))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.Set("user_id", userID)
-
-		mockUsecase.EXPECT().
-			ChangePassword(gomock.Any(), userID, gomock.Any()).
-			Return(errors.New("usecase error"))
-
-		err := userHandler.ChangePassword(c)
-
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusInternalServerError, rec.Code)
-
-		var response map[string]string
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Equal(t, "usecase error", response["error"])
-	})
-
-	t.Run("error - invalid JSON", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/users/change-password", bytes.NewBuffer([]byte("invalid json")))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.Set("user_id", userID)
-
-		err := userHandler.ChangePassword(c)
-
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
-
-		var response map[string]string
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Equal(t, "Invalid request format", response["error"])
 	})
 }
 
