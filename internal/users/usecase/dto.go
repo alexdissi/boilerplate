@@ -20,6 +20,11 @@ type UpdateUserRequest struct {
 	LastName  *string `json:"last_name,omitempty" form:"last_name" validate:"omitempty,min=2,max=50"`
 }
 
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" form:"current_password" validate:"required,min=8"`
+	NewPassword     string `json:"new_password" form:"new_password" validate:"required,min=8,max=128"`
+}
+
 func ToUserProfileResponse(user *domain.User) UserProfileResponse {
 	var lastLoginAt *string
 	if user.LastLoginAt != nil {

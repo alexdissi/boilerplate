@@ -12,4 +12,5 @@ import (
 type UserRepository interface {
 	GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.User, error)
 	UpdateUser(ctx context.Context, user *domain.User) (*domain.User, error)
+	UpdatePassword(ctx context.Context, userID uuid.UUID, passwordHash string) error
 }

@@ -24,7 +24,7 @@ func NewUserStore(db database.Service) UserRepository {
 func (s *UserStore) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
 	query := `
 		SELECT id, email, first_name, last_name, profile_picture,
-			   last_login_at, is_active
+			   last_login_at, is_active, password_hash
 		FROM users
 		WHERE id = $1`
 
@@ -37,6 +37,7 @@ func (s *UserStore) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.
 		&user.ProfilePicture,
 		&user.LastLoginAt,
 		&user.IsActive,
+		&user.PasswordHash,
 	)
 
 	if err != nil {
@@ -81,4 +82,15 @@ func (s *UserStore) UpdateUser(ctx context.Context, user *domain.User) (*domain.
 	}
 
 	return updatedUser, nil
+}
+
+func (s *UserStore) UpdatePassword(ctx context.Context, userID uuid.UUID, passwordHash string) error {
+	query := `UPDATE users SET password_hash = $2 WHERE id = $1`
+
+	_, err := s.db.Pool().Exec(ctx, query, userID, passwordHash)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

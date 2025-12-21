@@ -57,6 +57,20 @@ func (mr *MockUserRepositoryMockRecorder) GetUserByID(ctx, userID any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserByID", reflect.TypeOf((*MockUserRepository)(nil).GetUserByID), ctx, userID)
 }
 
+// UpdatePassword mocks base method.
+func (m *MockUserRepository) UpdatePassword(ctx context.Context, userID uuid.UUID, passwordHash string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdatePassword", ctx, userID, passwordHash)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdatePassword indicates an expected call of UpdatePassword.
+func (mr *MockUserRepositoryMockRecorder) UpdatePassword(ctx, userID, passwordHash any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePassword", reflect.TypeOf((*MockUserRepository)(nil).UpdatePassword), ctx, userID, passwordHash)
+}
+
 // UpdateUser mocks base method.
 func (m *MockUserRepository) UpdateUser(ctx context.Context, user *domain.User) (*domain.User, error) {
 	m.ctrl.T.Helper()
