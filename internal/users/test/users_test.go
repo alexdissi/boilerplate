@@ -14,6 +14,7 @@ import (
 	"my_project/internal/users/usecase"
 	"my_project/pkg/logger"
 	"my_project/pkg/password"
+	passwordValidator "my_project/pkg/validator"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
@@ -373,9 +374,12 @@ func TestChangePassword_Usecase(t *testing.T) {
 func TestChangePassword_Handler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
+	logger.Init()
 
 	mockUsecase := NewMockUserUsecase(ctrl)
 	validator := validator.New()
+	validator.RegisterValidation("strongpassword", passwordValidator.ValidateStrongPassword)
+
 	userHandler := handler.NewUserHandler(mockUsecase, validator)
 
 	e := echo.New()
@@ -460,6 +464,102 @@ func TestChangePassword_Handler(t *testing.T) {
 		reqBody := map[string]string{
 			"current_password": "oldPassword123!",
 			"new_password":     "short", // Less than 8 characters
+		}
+
+		reqJSON, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPost, "/users/change-password", bytes.NewBuffer(reqJSON))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.Set("user_id", userID)
+
+		err := userHandler.ChangePassword(c)
+
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+		var response map[string]string
+		err = json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Contains(t, response["error"], "Validation failed")
+	})
+
+	t.Run("error - validation failed (password not strong enough)", func(t *testing.T) {
+		reqBody := map[string]string{
+			"current_password": "oldPassword123!",
+			"new_password":     "weakpassword", // No uppercase, numbers or special chars
+		}
+
+		reqJSON, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPost, "/users/change-password", bytes.NewBuffer(reqJSON))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.Set("user_id", userID)
+
+		err := userHandler.ChangePassword(c)
+
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+		var response map[string]string
+		err = json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Contains(t, response["error"], "Validation failed")
+	})
+
+	t.Run("error - validation failed (missing uppercase)", func(t *testing.T) {
+		reqBody := map[string]string{
+			"current_password": "oldPassword123!",
+			"new_password":     "weakpass123!", // Missing uppercase
+		}
+
+		reqJSON, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPost, "/users/change-password", bytes.NewBuffer(reqJSON))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.Set("user_id", userID)
+
+		err := userHandler.ChangePassword(c)
+
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+		var response map[string]string
+		err = json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Contains(t, response["error"], "Validation failed")
+	})
+
+	t.Run("error - validation failed (missing lowercase)", func(t *testing.T) {
+		reqBody := map[string]string{
+			"current_password": "oldPassword123!",
+			"new_password":     "WEAKPASS123!", // Missing lowercase
+		}
+
+		reqJSON, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest(http.MethodPost, "/users/change-password", bytes.NewBuffer(reqJSON))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.Set("user_id", userID)
+
+		err := userHandler.ChangePassword(c)
+
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+		var response map[string]string
+		err = json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Contains(t, response["error"], "Validation failed")
+	})
+
+	t.Run("error - validation failed (missing special character)", func(t *testing.T) {
+		reqBody := map[string]string{
+			"current_password": "oldPassword123!",
+			"new_password":     "Weakpass123", // Missing special character
 		}
 
 		reqJSON, _ := json.Marshal(reqBody)

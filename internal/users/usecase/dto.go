@@ -22,7 +22,7 @@ type UpdateUserRequest struct {
 
 type ChangePasswordRequest struct {
 	CurrentPassword string `json:"current_password" form:"current_password" validate:"required,min=8"`
-	NewPassword     string `json:"new_password" form:"new_password" validate:"required,min=8,max=128"`
+	NewPassword     string `json:"new_password" form:"new_password" validate:"required,min=8,max=128,strongpassword"`
 }
 
 func ToUserProfileResponse(user *domain.User) UserProfileResponse {

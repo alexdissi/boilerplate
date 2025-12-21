@@ -15,6 +15,8 @@ import (
 	"net/http"
 	"os"
 
+	passwordValidator "my_project/pkg/validator"
+
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -115,8 +117,11 @@ func (s *Server) setupUsersRoutes(apiGroup *echo.Group) {
 	userStore := usersRepository.NewUserStore(s.db)
 	usersUseCase := usersUsecase.NewUserUsecase(userStore)
 	validator := validator.New()
+	validator.RegisterValidation("strongpassword", passwordValidator.ValidateStrongPassword)
+
 	usersHandler := usersHandler.NewUserHandler(usersUseCase, validator)
 
 	usersGroup := apiGroup.Group("/users", sessionMiddleware.CookieSessionMiddleware())
+
 	usersHandler.Bind(usersGroup)
 }
