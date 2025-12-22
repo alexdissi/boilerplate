@@ -92,10 +92,18 @@ func (h *UserHandler) ChangePassword(c echo.Context) error {
 	ctx := c.Request().Context()
 	err := h.usecase.ChangePassword(ctx, userID, req)
 	if err != nil {
-		if errors.Is(err, domain.ErrInvalidCurrentPassword) {
+		switch {
+		case errors.Is(err, domain.ErrInvalidCurrentPassword):
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Current password is incorrect"})
+		case errors.Is(err, domain.ErrPasswordVerificationFailed):
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Password verification failed"})
+		case errors.Is(err, domain.ErrPasswordProcessingFailed):
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to process new password"})
+		case errors.Is(err, domain.ErrUserUpdateFailed):
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update password"})
+		default:
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"message": "Password changed successfully"})

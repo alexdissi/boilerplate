@@ -77,10 +77,6 @@ func TestRegisterUser_Success(t *testing.T) {
 			return user, nil
 		})
 
-	mockRepo.EXPECT().
-		CreateSubscription(ctx, &domain.AuthSubscription{UserID: userID.String()}).
-		Return(nil)
-
 	result, err := service.RegisterUser(ctx, input)
 
 	require.NoError(t, err)

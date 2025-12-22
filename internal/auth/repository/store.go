@@ -23,12 +23,29 @@ func NewUserStore(db database.Service) UserRepository {
 }
 
 func (s *UserStore) CreateUser(ctx context.Context, user *domain.UserAuth) (*domain.UserAuth, error) {
+	tx, err := s.db.Pool().Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
 	query := `INSERT INTO users (email, password_hash, first_name, last_name, profile_picture, google_id, oauth_provider)
 			  VALUES ($1, $2, $3, $4, $5, $6, $7::oauth_provider)
 			  RETURNING id`
 
-	err := s.db.Pool().QueryRow(ctx, query, user.Email, user.PasswordHash, user.FirstName, user.LastName, user.ProfilePicture, user.GoogleID, user.OAuthProvider).Scan(&user.ID)
+	err = tx.QueryRow(ctx, query, user.Email, user.PasswordHash, user.FirstName, user.LastName, user.ProfilePicture, user.GoogleID, user.OAuthProvider).Scan(&user.ID)
 	if err != nil {
+		return nil, err
+	}
+
+	subscriptionQuery := `INSERT INTO subscriptions (user_id, started_at)
+						  VALUES ($1, $2)`
+	_, err = tx.Exec(ctx, subscriptionQuery, user.ID.String(), time.Now())
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 

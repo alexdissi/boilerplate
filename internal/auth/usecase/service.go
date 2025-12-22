@@ -76,14 +76,6 @@ func (s *UserService) RegisterUser(ctx context.Context, input RegisterUserInput)
 		return RegisterUserOutput{}, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	err = s.repo.CreateSubscription(ctx, &domain.AuthSubscription{
-		UserID: createdUser.ID.String(),
-	})
-	if err != nil {
-		logger.Error("Repository error creating subscription:", err)
-		return RegisterUserOutput{}, fmt.Errorf("failed to create subscription: %w", err)
-	}
-
 	go func() {
 		err := s.mailer.SendMail(createdUser.Email, "welcome-email", map[string]any{
 			"NAME": createdUser.FirstName + " " + createdUser.LastName,
@@ -272,7 +264,9 @@ func (s *UserService) getGoogleUserInfo(accessToken string) (*GoogleUserInfo, er
 
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -384,13 +378,6 @@ func (s *UserService) LoginWithGoogleInfo(ctx context.Context, googleUser *Googl
 	if err != nil {
 		logger.Error("Failed to create Google user:", err)
 		return GoogleAuthOutput{}, fmt.Errorf("failed to create user: %w", err)
-	}
-
-	err = s.repo.CreateSubscription(ctx, &domain.AuthSubscription{
-		UserID: createdUser.ID.String(),
-	})
-	if err != nil {
-		logger.Error("Failed to create subscription for Google user:", err)
 	}
 
 	return s.createSessionForExistingUser(ctx, createdUser, userAgent, ipAddress)

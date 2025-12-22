@@ -297,7 +297,7 @@ func TestChangePassword_Usecase(t *testing.T) {
 				if tt.name == "invalid user ID" {
 					assert.Equal(t, tt.expectedError, err)
 				} else if tt.name == "failed to update password" {
-					assert.Contains(t, err.Error(), "failed to update password")
+					assert.Contains(t, err.Error(), "failed to update user")
 				} else {
 					assert.Contains(t, err.Error(), tt.expectedError.Error())
 				}
