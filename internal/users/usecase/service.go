@@ -83,13 +83,16 @@ func (u *userUsecase) ChangePassword(ctx context.Context, userID string, req Cha
 	user, err := u.userRepo.GetUserByID(ctx, userUUID)
 	if err != nil {
 		logger.Error("failed to get user for password change", err)
-		return errors.New("user not found")
+		if errors.Is(err, domain.ErrUserNotFound) {
+			return domain.ErrUserNotFound
+		}
+		return err
 	}
 
 	passwordMatch, err := password.ComparePassword(user.PasswordHash, req.CurrentPassword)
 	if err != nil {
 		logger.Error("password comparison error", err)
-		return errors.New("password verification failed")
+		return domain.ErrPasswordVerificationFailed
 	}
 
 	if !passwordMatch {
@@ -99,13 +102,13 @@ func (u *userUsecase) ChangePassword(ctx context.Context, userID string, req Cha
 	hashedPassword, err := password.HashPassword(req.NewPassword)
 	if err != nil {
 		logger.Error("failed to hash new password", err)
-		return errors.New("failed to process new password")
+		return domain.ErrPasswordProcessingFailed
 	}
 
 	err = u.userRepo.UpdatePassword(ctx, userUUID, hashedPassword)
 	if err != nil {
 		logger.Error("failed to update password", err)
-		return errors.New("failed to update password")
+		return domain.ErrUserUpdateFailed
 	}
 
 	return nil

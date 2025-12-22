@@ -6,11 +6,15 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-// ValidateStrongPassword validates password strength requirements
+const (
+	MinPasswordLength = 8
+	MaxPasswordLength = 128
+)
+
 func ValidateStrongPassword(fl validator.FieldLevel) bool {
 	password := fl.Field().String()
 
-	if len(password) < 8 || len(password) > 128 {
+	if len(password) < MinPasswordLength || len(password) > MaxPasswordLength {
 		return false
 	}
 

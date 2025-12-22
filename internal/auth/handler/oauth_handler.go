@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"my_project/internal/auth/domain"
@@ -19,10 +20,15 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
+const (
+	oauthStateExpiration = 10 * time.Minute
+)
+
 type OAuthHandler struct {
 	usecase usecase.UserUsecase
 	config  *oauth2.Config
-	cache  map[string]string // state -> timestamp for CSRF protection
+	cache   map[string]string // state -> timestamp for CSRF protection
+	mu      sync.RWMutex      // protects cache
 }
 
 func NewOAuthHandler(u usecase.UserUsecase) *OAuthHandler {
@@ -61,7 +67,9 @@ func (h *OAuthHandler) GoogleAuthURL(c echo.Context) error {
 	config.ClientSecret = os.Getenv("GOOGLE_CLIENT_SECRET")
 	config.RedirectURL = redirectURI
 
+	h.mu.Lock()
 	h.cache[state] = time.Now().Format(time.RFC3339)
+	h.mu.Unlock()
 
 	return c.JSON(http.StatusOK, map[string]string{
 		"auth_url": config.AuthCodeURL(state),
@@ -81,7 +89,9 @@ func (h *OAuthHandler) GoogleCallback(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid state"})
 	}
 
+	h.mu.Lock()
 	delete(h.cache, state)
+	h.mu.Unlock()
 
 	config := *h.config
 	config.ClientID = os.Getenv("GOOGLE_CLIENT_ID")
@@ -187,7 +197,10 @@ func (h *OAuthHandler) validateState(state string) bool {
 		return false
 	}
 
+	h.mu.RLock()
 	timestampStr, exists := h.cache[state]
+	h.mu.RUnlock()
+
 	if !exists {
 		return false
 	}
@@ -197,7 +210,7 @@ func (h *OAuthHandler) validateState(state string) bool {
 		return false
 	}
 
-	return time.Since(timestamp) < 10*time.Minute
+	return time.Since(timestamp) < oauthStateExpiration
 }
 
 func (h *OAuthHandler) getRedirectURI() string {

@@ -85,11 +85,15 @@ func (s *UserStore) UpdateUser(ctx context.Context, user *domain.User) (*domain.
 }
 
 func (s *UserStore) UpdatePassword(ctx context.Context, userID uuid.UUID, passwordHash string) error {
-	query := `UPDATE users SET password_hash = $2 WHERE id = $1`
+	query := `UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1`
 
-	_, err := s.db.Pool().Exec(ctx, query, userID, passwordHash)
+	commandTag, err := s.db.Pool().Exec(ctx, query, userID, passwordHash)
 	if err != nil {
 		return err
+	}
+
+	if commandTag.RowsAffected() == 0 {
+		return domain.ErrUserNotFound
 	}
 
 	return nil
