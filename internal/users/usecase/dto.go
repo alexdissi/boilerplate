@@ -15,9 +15,10 @@ type UserProfileResponse struct {
 }
 
 type UpdateUserRequest struct {
-	Email     *string `json:"email,omitempty" form:"email" validate:"omitempty,email"`
-	FirstName *string `json:"first_name,omitempty" form:"first_name" validate:"omitempty,min=2,max=50"`
-	LastName  *string `json:"last_name,omitempty" form:"last_name" validate:"omitempty,min=2,max=50"`
+	Email         *string `json:"email,omitempty" form:"email" validate:"omitempty,email"`
+	FirstName     *string `json:"first_name,omitempty" form:"first_name" validate:"omitempty,min=2,max=50"`
+	LastName      *string `json:"last_name,omitempty" form:"last_name" validate:"omitempty,min=2,max=50"`
+	ProfilePicture *string `json:"profile_picture,omitempty" form:"profile_picture"`
 }
 
 type ChangePasswordRequest struct {
