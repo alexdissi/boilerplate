@@ -1,14 +1,17 @@
 package usecase
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base32"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"mime/multipart"
 	"slices"
 	"strings"
+	"image/png"
 
 	"my_project/internal/users/domain"
 	"my_project/internal/users/repository"
@@ -204,14 +207,16 @@ func generateSecret() (string, error) {
 	return base32.StdEncoding.EncodeToString(secret), nil
 }
 
-func generateRecoveryCodes() []string {
+func generateRecoveryCodes() ([]string, error) {
 	codes := make([]string, 10)
 	for i := range 10 {
 		code := make([]byte, 4)
-		rand.Read(code)
+		if _, err := rand.Read(code); err != nil {
+			return nil, err
+		}
 		codes[i] = fmt.Sprintf("%02x%02x-%02x%02x", code[0], code[1], code[2], code[3])
 	}
-	return codes
+	return codes, nil
 }
 
 func (u *userUsecase) SetupTwoFactor(ctx context.Context, userID string) (TwoFactorSetupResponse, error) {
@@ -236,8 +241,6 @@ func (u *userUsecase) SetupTwoFactor(ctx context.Context, userID string) (TwoFac
 		return TwoFactorSetupResponse{}, domain.ErrFailedToGenerateTwoFactor
 	}
 
-	recoveryCodes := generateRecoveryCodes()
-
 	key, err := otp.NewKeyFromURL(fmt.Sprintf(
 		"otpauth://totp/Boilerplate:%s?secret=%s&issuer=Boilerplate&algorithm=SHA1&digits=6&period=30",
 		user.Email,
@@ -248,51 +251,60 @@ func (u *userUsecase) SetupTwoFactor(ctx context.Context, userID string) (TwoFac
 		return TwoFactorSetupResponse{}, domain.ErrFailedToGenerateTwoFactor
 	}
 
-	qrCode, err := key.Image(256, 256)
+	qrCodeImg, err := key.Image(256, 256)
 	if err != nil {
 		logger.Error("failed to generate QR code", err)
 		return TwoFactorSetupResponse{}, domain.ErrFailedToGenerateTwoFactor
 	}
 
-	qrCodeBase64 := fmt.Sprintf("data:image/png;base64,%s", qrCode)
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, qrCodeImg); err != nil {
+		logger.Error("failed to encode QR code to PNG", err)
+		return TwoFactorSetupResponse{}, domain.ErrFailedToGenerateTwoFactor
+	}
+
+	qrCodeBase64 := fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(buf.Bytes()))
 
 	return TwoFactorSetupResponse{
-		QRCode:        qrCodeBase64,
-		Secret:        secret,
-		RecoveryCodes: recoveryCodes,
+		QRCode: qrCodeBase64,
+		Secret: secret,
 	}, nil
 }
 
-func (u *userUsecase) EnableTwoFactor(ctx context.Context, userID string, req EnableTwoFactorRequest) error {
+func (u *userUsecase) EnableTwoFactor(ctx context.Context, userID string, req EnableTwoFactorRequest) (EnableTwoFactorResponse, error) {
 	userUUID, err := uuid.Parse(userID)
 	if err != nil {
-		return domain.ErrInvalidUserID
+		return EnableTwoFactorResponse{}, domain.ErrInvalidUserID
 	}
 
 	user, err := u.userRepo.GetUserByID(ctx, userUUID)
 	if err != nil {
 		logger.Error("failed to get user", err)
-		return err
+		return EnableTwoFactorResponse{}, err
 	}
 
 	if user.TwoFactorEnabled {
-		return domain.ErrTwoFactorAlreadyEnabled
+		return EnableTwoFactorResponse{}, domain.ErrTwoFactorAlreadyEnabled
 	}
 
 	valid := totp.Validate(req.Code, req.Secret)
 	if !valid {
-		return domain.ErrInvalidTwoFactorCode
+		return EnableTwoFactorResponse{}, domain.ErrInvalidTwoFactorCode
 	}
-
-	recoveryCodes := generateRecoveryCodes()
-
+	recoveryCodes, err := generateRecoveryCodes()
+	if err != nil {
+		logger.Error("failed to generate recovery codes", err)
+		return EnableTwoFactorResponse{}, domain.ErrFailedToGenerateRecoveryCodes
+	}
 	err = u.userRepo.EnableTwoFactor(ctx, userUUID, req.Secret, recoveryCodes)
 	if err != nil {
 		logger.Error("failed to enable two factor", err)
-		return domain.ErrFailedToEnableTwoFactor
+		return EnableTwoFactorResponse{}, domain.ErrFailedToEnableTwoFactor
 	}
 
-	return nil
+	return EnableTwoFactorResponse{
+		RecoveryCodes: recoveryCodes,
+	}, nil
 }
 
 func (u *userUsecase) DisableTwoFactor(ctx context.Context, userID string, req DisableTwoFactorRequest) error {

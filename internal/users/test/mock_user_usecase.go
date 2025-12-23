@@ -70,6 +70,35 @@ func (mr *MockUserUsecaseMockRecorder) DeleteUser(ctx, userID any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteUser", reflect.TypeOf((*MockUserUsecase)(nil).DeleteUser), ctx, userID)
 }
 
+// DisableTwoFactor mocks base method.
+func (m *MockUserUsecase) DisableTwoFactor(ctx context.Context, userID string, req usecase.DisableTwoFactorRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DisableTwoFactor", ctx, userID, req)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DisableTwoFactor indicates an expected call of DisableTwoFactor.
+func (mr *MockUserUsecaseMockRecorder) DisableTwoFactor(ctx, userID, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DisableTwoFactor", reflect.TypeOf((*MockUserUsecase)(nil).DisableTwoFactor), ctx, userID, req)
+}
+
+// EnableTwoFactor mocks base method.
+func (m *MockUserUsecase) EnableTwoFactor(ctx context.Context, userID string, req usecase.EnableTwoFactorRequest) (usecase.EnableTwoFactorResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EnableTwoFactor", ctx, userID, req)
+	ret0, _ := ret[0].(usecase.EnableTwoFactorResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// EnableTwoFactor indicates an expected call of EnableTwoFactor.
+func (mr *MockUserUsecaseMockRecorder) EnableTwoFactor(ctx, userID, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnableTwoFactor", reflect.TypeOf((*MockUserUsecase)(nil).EnableTwoFactor), ctx, userID, req)
+}
+
 // GetUserProfile mocks base method.
 func (m *MockUserUsecase) GetUserProfile(ctx context.Context, userID string) (usecase.UserProfileResponse, error) {
 	m.ctrl.T.Helper()
@@ -83,6 +112,21 @@ func (m *MockUserUsecase) GetUserProfile(ctx context.Context, userID string) (us
 func (mr *MockUserUsecaseMockRecorder) GetUserProfile(ctx, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserProfile", reflect.TypeOf((*MockUserUsecase)(nil).GetUserProfile), ctx, userID)
+}
+
+// SetupTwoFactor mocks base method.
+func (m *MockUserUsecase) SetupTwoFactor(ctx context.Context, userID string) (usecase.TwoFactorSetupResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetupTwoFactor", ctx, userID)
+	ret0, _ := ret[0].(usecase.TwoFactorSetupResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetupTwoFactor indicates an expected call of SetupTwoFactor.
+func (mr *MockUserUsecaseMockRecorder) SetupTwoFactor(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetupTwoFactor", reflect.TypeOf((*MockUserUsecase)(nil).SetupTwoFactor), ctx, userID)
 }
 
 // UpdateUserProfile mocks base method.

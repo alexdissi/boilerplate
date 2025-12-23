@@ -4,19 +4,21 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"io"
 )
 
 var encryptionKey []byte
 
 func SetEncryptionKey(key string) {
-	if len(key) < 32 {
-		key = fmt.Sprintf("%-32s", key)
+	if key == "" {
+		encryptionKey = nil
+		return
 	}
-	encryptionKey = []byte(key[:32])
+	sum := sha256.Sum256([]byte(key))
+	encryptionKey = sum[:]
 }
 
 func EncryptSecret(plaintext string) (string, error) {

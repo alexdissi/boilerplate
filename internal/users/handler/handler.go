@@ -209,7 +209,7 @@ func (h *UserHandler) EnableTwoFactor(c echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
-	err := h.usecase.EnableTwoFactor(ctx, userID, req)
+	response, err := h.usecase.EnableTwoFactor(ctx, userID, req)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvalidUserID):
@@ -223,7 +223,7 @@ func (h *UserHandler) EnableTwoFactor(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{"message": "Two-factor authentication enabled successfully"})
+	return c.JSON(http.StatusOK, response)
 }
 
 func (h *UserHandler) DisableTwoFactor(c echo.Context) error {
