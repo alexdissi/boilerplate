@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 
+	"my_project/pkg/crypto"
 	uploadfiles "my_project/pkg/uploadfiles"
 	passwordValidator "my_project/pkg/validator"
 
@@ -25,6 +26,7 @@ import (
 
 func (s *Server) RegisterRoutes() http.Handler {
 	e := echo.New()
+	crypto.SetEncryptionKey(os.Getenv("TWO_FACTOR_ENCRYPTION_KEY"))
 	e.Use(middleware.RequestLogger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.SecureWithConfig(middleware.SecureConfig{

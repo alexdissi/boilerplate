@@ -27,6 +27,9 @@ func (h *UserHandler) Bind(e *echo.Group) {
 	e.PATCH("/me", h.UpdateUserProfile)
 	e.DELETE("/me", h.DeleteUser)
 	e.POST("/change-password", h.ChangePassword)
+	e.POST("/2fa/setup", h.SetupTwoFactor)
+	e.POST("/2fa/enable", h.EnableTwoFactor)
+	e.POST("/2fa/disable", h.DisableTwoFactor)
 	e.POST("/avatar", h.UploadAvatar)
 }
 
@@ -166,4 +169,92 @@ func (h *UserHandler) UploadAvatar(c echo.Context) error {
 		"message":    "Avatar uploaded successfully",
 		"avatar_url": avatarURL,
 	})
+}
+
+func (h *UserHandler) SetupTwoFactor(c echo.Context) error {
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+	}
+
+	ctx := c.Request().Context()
+	response, err := h.usecase.SetupTwoFactor(ctx, userID)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrInvalidUserID):
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid user ID"})
+		case errors.Is(err, domain.ErrTwoFactorAlreadyEnabled):
+			return c.JSON(http.StatusConflict, map[string]string{"error": "Two-factor authentication already enabled"})
+		default:
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to setup two-factor authentication"})
+		}
+	}
+
+	return c.JSON(http.StatusOK, response)
+}
+
+func (h *UserHandler) EnableTwoFactor(c echo.Context) error {
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+	}
+
+	var req usecase.EnableTwoFactorRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
+	}
+
+	if err := h.validator.Struct(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Validation failed"})
+	}
+
+	ctx := c.Request().Context()
+	err := h.usecase.EnableTwoFactor(ctx, userID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrInvalidUserID):
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid user ID"})
+		case errors.Is(err, domain.ErrTwoFactorAlreadyEnabled):
+			return c.JSON(http.StatusConflict, map[string]string{"error": "Two-factor authentication already enabled"})
+		case errors.Is(err, domain.ErrInvalidTwoFactorCode):
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid two-factor code"})
+		default:
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to enable two-factor authentication"})
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"message": "Two-factor authentication enabled successfully"})
+}
+
+func (h *UserHandler) DisableTwoFactor(c echo.Context) error {
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+	}
+
+	var req usecase.DisableTwoFactorRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
+	}
+
+	if err := h.validator.Struct(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Validation failed"})
+	}
+
+	ctx := c.Request().Context()
+	err := h.usecase.DisableTwoFactor(ctx, userID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrInvalidUserID):
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid user ID"})
+		case errors.Is(err, domain.ErrTwoFactorNotEnabled):
+			return c.JSON(http.StatusConflict, map[string]string{"error": "Two-factor authentication not enabled"})
+		case errors.Is(err, domain.ErrInvalidTwoFactorCode):
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid two-factor code"})
+		default:
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to disable two-factor authentication"})
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"message": "Two-factor authentication disabled successfully"})
 }

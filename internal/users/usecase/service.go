@@ -2,6 +2,8 @@ package usecase
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base32"
 	"errors"
 	"fmt"
 	"mime/multipart"
@@ -10,11 +12,14 @@ import (
 
 	"my_project/internal/users/domain"
 	"my_project/internal/users/repository"
+	"my_project/pkg/crypto"
 	"my_project/pkg/logger"
 	"my_project/pkg/password"
 	"my_project/pkg/uploadfiles"
 
 	"github.com/google/uuid"
+	"github.com/pquerna/otp"
+	"github.com/pquerna/otp/totp"
 )
 
 const BucketFolder = "avatars"
@@ -188,4 +193,144 @@ func (u *userUsecase) UploadAvatar(ctx context.Context, userID string, fileHeade
 	}
 
 	return avatarURL, nil
+}
+
+func generateSecret() (string, error) {
+	secret := make([]byte, 20)
+	_, err := rand.Read(secret)
+	if err != nil {
+		return "", err
+	}
+	return base32.StdEncoding.EncodeToString(secret), nil
+}
+
+func generateRecoveryCodes() []string {
+	codes := make([]string, 10)
+	for i := range 10 {
+		code := make([]byte, 4)
+		rand.Read(code)
+		codes[i] = fmt.Sprintf("%02x%02x-%02x%02x", code[0], code[1], code[2], code[3])
+	}
+	return codes
+}
+
+func (u *userUsecase) SetupTwoFactor(ctx context.Context, userID string) (TwoFactorSetupResponse, error) {
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return TwoFactorSetupResponse{}, domain.ErrInvalidUserID
+	}
+
+	user, err := u.userRepo.GetUserByID(ctx, userUUID)
+	if err != nil {
+		logger.Error("failed to get user", err)
+		return TwoFactorSetupResponse{}, err
+	}
+
+	if user.TwoFactorEnabled {
+		return TwoFactorSetupResponse{}, domain.ErrTwoFactorAlreadyEnabled
+	}
+
+	secret, err := generateSecret()
+	if err != nil {
+		logger.Error("failed to generate secret", err)
+		return TwoFactorSetupResponse{}, domain.ErrFailedToGenerateTwoFactor
+	}
+
+	recoveryCodes := generateRecoveryCodes()
+
+	key, err := otp.NewKeyFromURL(fmt.Sprintf(
+		"otpauth://totp/Boilerplate:%s?secret=%s&issuer=Boilerplate&algorithm=SHA1&digits=6&period=30",
+		user.Email,
+		secret,
+	))
+	if err != nil {
+		logger.Error("failed to create OTP key", err)
+		return TwoFactorSetupResponse{}, domain.ErrFailedToGenerateTwoFactor
+	}
+
+	qrCode, err := key.Image(256, 256)
+	if err != nil {
+		logger.Error("failed to generate QR code", err)
+		return TwoFactorSetupResponse{}, domain.ErrFailedToGenerateTwoFactor
+	}
+
+	qrCodeBase64 := fmt.Sprintf("data:image/png;base64,%s", qrCode)
+
+	return TwoFactorSetupResponse{
+		QRCode:        qrCodeBase64,
+		Secret:        secret,
+		RecoveryCodes: recoveryCodes,
+	}, nil
+}
+
+func (u *userUsecase) EnableTwoFactor(ctx context.Context, userID string, req EnableTwoFactorRequest) error {
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return domain.ErrInvalidUserID
+	}
+
+	user, err := u.userRepo.GetUserByID(ctx, userUUID)
+	if err != nil {
+		logger.Error("failed to get user", err)
+		return err
+	}
+
+	if user.TwoFactorEnabled {
+		return domain.ErrTwoFactorAlreadyEnabled
+	}
+
+	valid := totp.Validate(req.Code, req.Secret)
+	if !valid {
+		return domain.ErrInvalidTwoFactorCode
+	}
+
+	recoveryCodes := generateRecoveryCodes()
+
+	err = u.userRepo.EnableTwoFactor(ctx, userUUID, req.Secret, recoveryCodes)
+	if err != nil {
+		logger.Error("failed to enable two factor", err)
+		return domain.ErrFailedToEnableTwoFactor
+	}
+
+	return nil
+}
+
+func (u *userUsecase) DisableTwoFactor(ctx context.Context, userID string, req DisableTwoFactorRequest) error {
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return domain.ErrInvalidUserID
+	}
+
+	user, err := u.userRepo.GetUserByID(ctx, userUUID)
+	if err != nil {
+		logger.Error("failed to get user", err)
+		return err
+	}
+
+	if !user.TwoFactorEnabled {
+		return domain.ErrTwoFactorNotEnabled
+	}
+
+	if user.TwoFactorSecret == nil {
+		return domain.ErrTwoFactorNotEnabled
+	}
+
+	decryptedSecret, err := crypto.DecryptSecret(*user.TwoFactorSecret)
+	if err != nil {
+		logger.Error("failed to decrypt secret", err)
+		return domain.ErrInvalidTwoFactorCode
+	}
+
+	valid := totp.Validate(req.Code, decryptedSecret)
+	if !valid {
+		return domain.ErrInvalidTwoFactorCode
+	}
+
+	err = u.userRepo.DisableTwoFactor(ctx, userUUID)
+	if err != nil {
+		logger.Error("failed to disable two factor", err)
+		return domain.ErrFailedToDisableTwoFactor
+	}
+
+	return nil
 }

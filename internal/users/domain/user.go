@@ -15,5 +15,8 @@ type User struct {
 	LastLoginAt    *time.Time `json:"last_login_at"`
 	IsActive       bool       `json:"is_active"`
 	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
-	PasswordHash   string     `json:"-"`
+	PasswordHash     string     `json:"-"`
+	TwoFactorEnabled bool       `json:"two_factor_enabled"`
+	TwoFactorSecret  *string    `json:"-"`
+	RecoveryCodes    []string   `json:"-"`
 }

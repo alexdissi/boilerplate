@@ -25,6 +25,21 @@ type ChangePasswordRequest struct {
 	NewPassword     string `json:"new_password" form:"new_password" validate:"required,min=8,max=128,strongpassword"`
 }
 
+type TwoFactorSetupResponse struct {
+	QRCode        string   `json:"qr_code"`
+	Secret        string   `json:"secret"`
+	RecoveryCodes []string `json:"recovery_codes"`
+}
+
+type EnableTwoFactorRequest struct {
+	Code   string `json:"code" form:"code" validate:"required,len=6"`
+	Secret string `json:"secret" form:"secret" validate:"required"`
+}
+
+type DisableTwoFactorRequest struct {
+	Code string `json:"code" form:"code" validate:"required,len=6"`
+}
+
 func ToUserProfileResponse(user *domain.User) UserProfileResponse {
 	var lastLoginAt *string
 	if user.LastLoginAt != nil {
