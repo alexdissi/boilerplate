@@ -3,22 +3,31 @@ package usecase
 import (
 	"context"
 	"errors"
+	"fmt"
+	"mime/multipart"
+	"slices"
+	"strings"
 
 	"my_project/internal/users/domain"
 	"my_project/internal/users/repository"
 	"my_project/pkg/logger"
 	"my_project/pkg/password"
+	"my_project/pkg/uploadfiles"
 
 	"github.com/google/uuid"
 )
 
+const BucketFolder = "avatars"
+
 type userUsecase struct {
 	userRepo repository.UserRepository
+	uploader *uploadfiles.Uploader
 }
 
-func NewUserUsecase(userRepo repository.UserRepository) UserUsecase {
+func NewUserUsecase(userRepo repository.UserRepository, uploader *uploadfiles.Uploader) UserUsecase {
 	return &userUsecase{
 		userRepo: userRepo,
+		uploader: uploader,
 	}
 }
 
@@ -131,4 +140,52 @@ func (u *userUsecase) DeleteUser(ctx context.Context, userID string) error {
 	}
 
 	return nil
+}
+
+func (u *userUsecase) UploadAvatar(ctx context.Context, userID string, fileHeader *multipart.FileHeader) (string, error) {
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return "", domain.ErrInvalidUserID
+	}
+
+	allowedExtensions := []string{".jpg", ".jpeg", ".png", ".gif", ".webp"}
+	ext := strings.ToLower(strings.TrimSpace(fileHeader.Filename[strings.LastIndex(fileHeader.Filename, "."):]))
+	isAllowed := slices.Contains(allowedExtensions, ext)
+	if !isAllowed {
+		return "", domain.ErrInvalidFileFormat
+	}
+
+	user, err := u.userRepo.GetUserByID(ctx, userUUID)
+	if err != nil {
+		logger.Error("failed to get user", err)
+		return "", err
+	}
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		logger.Error("failed to open file", err)
+		return "", fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	avatarURL, err := u.uploader.Upload(ctx, file, fileHeader, BucketFolder)
+	if err != nil {
+		logger.Error("failed to upload avatar", err)
+		return "", fmt.Errorf("failed to upload avatar: %w", err)
+	}
+
+	if user.ProfilePicture != "" {
+		err = u.uploader.Delete(ctx, user.ProfilePicture)
+		if err != nil {
+			logger.Error("failed to delete old avatar", err)
+		}
+	}
+
+	err = u.userRepo.UpdateAvatar(ctx, userUUID, avatarURL)
+	if err != nil {
+		logger.Error("failed to update avatar URL", err)
+		return "", err
+	}
+
+	return avatarURL, nil
 }

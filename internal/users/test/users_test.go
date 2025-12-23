@@ -29,7 +29,7 @@ func TestUpdateUserProfile_Usecase(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := NewMockUserRepository(ctrl)
-	userUsecase := usecase.NewUserUsecase(mockRepo)
+	userUsecase := usecase.NewUserUsecase(mockRepo, nil)
 
 	ctx := context.Background()
 	userUUID := uuid.New()
@@ -210,7 +210,7 @@ func TestChangePassword_Usecase(t *testing.T) {
 	logger.Init()
 
 	mockRepo := NewMockUserRepository(ctrl)
-	userUsecase := usecase.NewUserUsecase(mockRepo)
+	userUsecase := usecase.NewUserUsecase(mockRepo, nil)
 
 	ctx := context.Background()
 	userUUID := uuid.New()
@@ -446,6 +446,76 @@ func TestChangePassword_Handler(t *testing.T) {
 				}
 			})
 		}
+	})
+}
+
+func TestDeleteUser_Usecase(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepo := NewMockUserRepository(ctrl)
+	userUsecase := usecase.NewUserUsecase(mockRepo, nil)
+
+	ctx := context.Background()
+	userUUID := uuid.New()
+	userID := userUUID.String()
+
+	t.Run("success", func(t *testing.T) {
+		mockRepo.EXPECT().DeleteUser(gomock.Any(), userUUID).Return(nil)
+
+		err := userUsecase.DeleteUser(ctx, userID)
+		require.NoError(t, err)
+	})
+
+	t.Run("error - invalid user ID", func(t *testing.T) {
+		err := userUsecase.DeleteUser(ctx, "invalid-uuid")
+		assert.Error(t, err)
+		assert.Equal(t, domain.ErrInvalidUserID, err)
+	})
+}
+
+func TestDeleteUser_Handler(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockUsecase := NewMockUserUsecase(ctrl)
+	validate := validatorV10.New()
+	userHandler := handler.NewUserHandler(mockUsecase, validate)
+
+	e := echo.New()
+	userID := uuid.New().String()
+
+	t.Run("success", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/users/me", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.Set("user_id", userID)
+
+		mockUsecase.EXPECT().DeleteUser(gomock.Any(), userID).Return(nil)
+
+		err := userHandler.DeleteUser(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var response map[string]string
+		err = json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Equal(t, "User deleted successfully", response["message"])
+	})
+
+	t.Run("error - unauthorized", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/users/me", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := userHandler.DeleteUser(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+
+		var response map[string]string
+		err = json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Equal(t, "Unauthorized", response["error"])
 	})
 }
 
