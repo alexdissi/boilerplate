@@ -55,6 +55,20 @@ func (mr *MockUserUsecaseMockRecorder) ChangePassword(ctx, userID, req any) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChangePassword", reflect.TypeOf((*MockUserUsecase)(nil).ChangePassword), ctx, userID, req)
 }
 
+// DeleteUser mocks base method.
+func (m *MockUserUsecase) DeleteUser(ctx context.Context, userID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteUser", ctx, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteUser indicates an expected call of DeleteUser.
+func (mr *MockUserUsecaseMockRecorder) DeleteUser(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteUser", reflect.TypeOf((*MockUserUsecase)(nil).DeleteUser), ctx, userID)
+}
+
 // GetUserProfile mocks base method.
 func (m *MockUserUsecase) GetUserProfile(ctx context.Context, userID string) (usecase.UserProfileResponse, error) {
 	m.ctrl.T.Helper()

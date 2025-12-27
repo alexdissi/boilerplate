@@ -56,7 +56,7 @@ func (s *UserStore) UpdateUser(ctx context.Context, user *domain.User) (*domain.
 		SET email = $2, first_name = $3, last_name = $4
 		WHERE id = $1
 		RETURNING id, email, first_name, last_name, profile_picture,
-				  last_login_at, is_active`
+				  last_login_at, is_active, deleted_at`
 
 	updatedUser := &domain.User{}
 	err := s.db.Pool().QueryRow(ctx, query,
@@ -72,6 +72,7 @@ func (s *UserStore) UpdateUser(ctx context.Context, user *domain.User) (*domain.
 		&updatedUser.ProfilePicture,
 		&updatedUser.LastLoginAt,
 		&updatedUser.IsActive,
+		&updatedUser.DeletedAt,
 	)
 
 	if err != nil {
@@ -88,6 +89,21 @@ func (s *UserStore) UpdatePassword(ctx context.Context, userID uuid.UUID, passwo
 	query := `UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1`
 
 	commandTag, err := s.db.Pool().Exec(ctx, query, userID, passwordHash)
+	if err != nil {
+		return err
+	}
+
+	if commandTag.RowsAffected() == 0 {
+		return domain.ErrUserNotFound
+	}
+
+	return nil
+}
+
+func (s *UserStore) DeleteUser(ctx context.Context, userID uuid.UUID) error {
+	query := `UPDATE users SET is_active = false, deleted_at = NOW() + INTERVAL '6 months', updated_at = NOW() WHERE id = $1 AND is_active = true`
+
+	commandTag, err := s.db.Pool().Exec(ctx, query, userID)
 	if err != nil {
 		return err
 	}

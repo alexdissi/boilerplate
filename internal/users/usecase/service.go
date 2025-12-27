@@ -113,3 +113,22 @@ func (u *userUsecase) ChangePassword(ctx context.Context, userID string, req Cha
 
 	return nil
 }
+
+func (u *userUsecase) DeleteUser(ctx context.Context, userID string) error {
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return domain.ErrInvalidUserID
+	}
+
+	err = u.userRepo.DeleteUser(ctx, userUUID)
+	if err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			logger.Error("user not found", err)
+			return domain.ErrUserNotFound
+		}
+		logger.Error("failed to delete user", err)
+		return err
+	}
+
+	return nil
+}
