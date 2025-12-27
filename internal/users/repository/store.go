@@ -6,9 +6,11 @@ import (
 
 	"my_project/internal/database"
 	"my_project/internal/users/domain"
+	"my_project/pkg/crypto"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type UserStore struct {
@@ -24,11 +26,13 @@ func NewUserStore(db database.Service) UserRepository {
 func (s *UserStore) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
 	query := `
 		SELECT id, email, first_name, last_name, profile_picture,
-			   last_login_at, is_active, password_hash
+			   last_login_at, is_active, password_hash, two_factor_enabled,
+			   two_factor_secret, recovery_codes
 		FROM users
 		WHERE id = $1`
 
 	user := &domain.User{}
+	var recoveryCodesArray pgtype.Array[string]
 	err := s.db.Pool().QueryRow(ctx, query, userID).Scan(
 		&user.ID,
 		&user.Email,
@@ -38,6 +42,9 @@ func (s *UserStore) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.
 		&user.LastLoginAt,
 		&user.IsActive,
 		&user.PasswordHash,
+		&user.TwoFactorEnabled,
+		&user.TwoFactorSecret,
+		&recoveryCodesArray,
 	)
 
 	if err != nil {
@@ -45,6 +52,10 @@ func (s *UserStore) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.
 			return nil, domain.ErrUserNotFound
 		}
 		return nil, err
+	}
+
+	if recoveryCodesArray.Valid {
+		user.RecoveryCodes = recoveryCodesArray.Elements
 	}
 
 	return user, nil
@@ -117,6 +128,41 @@ func (s *UserStore) UpdateAvatar(ctx context.Context, userID uuid.UUID, avatarUR
 	query := `UPDATE users SET profile_picture = $2, updated_at = NOW() WHERE id = $1`
 
 	commandTag, err := s.db.Pool().Exec(ctx, query, userID, avatarURL)
+	if err != nil {
+		return err
+	}
+
+	if commandTag.RowsAffected() == 0 {
+		return domain.ErrUserNotFound
+	}
+
+	return nil
+}
+
+func (s *UserStore) EnableTwoFactor(ctx context.Context, userID uuid.UUID, secret string, recoveryCodes []string) error {
+	encryptedSecret, err := crypto.EncryptSecret(secret)
+	if err != nil {
+		return err
+	}
+
+	query := `UPDATE users SET two_factor_enabled = true, two_factor_secret = $2, recovery_codes = $3, updated_at = NOW() WHERE id = $1`
+
+	commandTag, err := s.db.Pool().Exec(ctx, query, userID, encryptedSecret, recoveryCodes)
+	if err != nil {
+		return err
+	}
+
+	if commandTag.RowsAffected() == 0 {
+		return domain.ErrUserNotFound
+	}
+
+	return nil
+}
+
+func (s *UserStore) DisableTwoFactor(ctx context.Context, userID uuid.UUID) error {
+	query := `UPDATE users SET two_factor_enabled = false, two_factor_secret = NULL, recovery_codes = NULL, updated_at = NOW() WHERE id = $1`
+
+	commandTag, err := s.db.Pool().Exec(ctx, query, userID)
 	if err != nil {
 		return err
 	}

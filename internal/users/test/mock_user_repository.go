@@ -56,6 +56,34 @@ func (mr *MockUserRepositoryMockRecorder) DeleteUser(ctx, userID any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteUser", reflect.TypeOf((*MockUserRepository)(nil).DeleteUser), ctx, userID)
 }
 
+// DisableTwoFactor mocks base method.
+func (m *MockUserRepository) DisableTwoFactor(ctx context.Context, userID uuid.UUID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DisableTwoFactor", ctx, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DisableTwoFactor indicates an expected call of DisableTwoFactor.
+func (mr *MockUserRepositoryMockRecorder) DisableTwoFactor(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DisableTwoFactor", reflect.TypeOf((*MockUserRepository)(nil).DisableTwoFactor), ctx, userID)
+}
+
+// EnableTwoFactor mocks base method.
+func (m *MockUserRepository) EnableTwoFactor(ctx context.Context, userID uuid.UUID, secret string, recoveryCodes []string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EnableTwoFactor", ctx, userID, secret, recoveryCodes)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// EnableTwoFactor indicates an expected call of EnableTwoFactor.
+func (mr *MockUserRepositoryMockRecorder) EnableTwoFactor(ctx, userID, secret, recoveryCodes any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnableTwoFactor", reflect.TypeOf((*MockUserRepository)(nil).EnableTwoFactor), ctx, userID, secret, recoveryCodes)
+}
+
 // GetUserByID mocks base method.
 func (m *MockUserRepository) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
 	m.ctrl.T.Helper()

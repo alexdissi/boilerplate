@@ -17,6 +17,9 @@ CREATE TABLE users (
     is_active BOOLEAN DEFAULT TRUE,  
     google_id TEXT UNIQUE,
     oauth_provider oauth_provider DEFAULT 'EMAIL',
+    two_factor_enabled BOOLEAN DEFAULT FALSE,
+    two_factor_secret TEXT,
+    recovery_codes TEXT[],
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     deleted_at TIMESTAMPTZ

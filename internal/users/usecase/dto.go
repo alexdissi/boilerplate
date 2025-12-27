@@ -25,6 +25,30 @@ type ChangePasswordRequest struct {
 	NewPassword     string `json:"new_password" form:"new_password" validate:"required,min=8,max=128,strongpassword"`
 }
 
+// TwoFactorSetupResponse contains the QR code and secret for 2FA setup.
+// WARNING: The secret should be shown once and never logged or cached.
+// Recovery codes are provided after successful 2FA enablement.
+type TwoFactorSetupResponse struct {
+	QRCode string `json:"qr_code"`
+	Secret string `json:"secret"`
+}
+
+type EnableTwoFactorRequest struct {
+	Code   string `json:"code" form:"code" validate:"required,len=6"`
+	Secret string `json:"-" form:"secret" validate:"required"`
+}
+
+// EnableTwoFactorResponse contains recovery codes after successful 2FA enablement.
+// WARNING: Recovery codes should only be shown once and must never be logged or cached.
+// The user should be instructed to save them securely.
+type EnableTwoFactorResponse struct {
+	RecoveryCodes []string `json:"recovery_codes"`
+}
+
+type DisableTwoFactorRequest struct {
+	Code string `json:"code" form:"code" validate:"required,len=6"`
+}
+
 func ToUserProfileResponse(user *domain.User) UserProfileResponse {
 	var lastLoginAt *string
 	if user.LastLoginAt != nil {
