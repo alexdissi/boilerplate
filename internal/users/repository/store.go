@@ -111,6 +111,19 @@ func (s *UserStore) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 	if commandTag.RowsAffected() == 0 {
 		return domain.ErrUserNotFound
 	}
+	return nil
+}
+func (s *UserStore) UpdateAvatar(ctx context.Context, userID uuid.UUID, avatarURL string) error {
+	query := `UPDATE users SET profile_picture = $2, updated_at = NOW() WHERE id = $1`
+
+	commandTag, err := s.db.Pool().Exec(ctx, query, userID, avatarURL)
+	if err != nil {
+		return err
+	}
+
+	if commandTag.RowsAffected() == 0 {
+		return domain.ErrUserNotFound
+	}
 
 	return nil
 }

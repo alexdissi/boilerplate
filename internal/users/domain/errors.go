@@ -10,4 +10,5 @@ var (
 	ErrPasswordVerificationFailed = errors.New("password verification failed")
 	ErrPasswordProcessingFailed  = errors.New("failed to process new password")
 	ErrUserUpdateFailed          = errors.New("failed to update user")
+	ErrInvalidFileFormat         = errors.New("invalid file format")
 )

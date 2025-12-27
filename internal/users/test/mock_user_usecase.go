@@ -11,6 +11,7 @@ package test
 
 import (
 	context "context"
+	multipart "mime/multipart"
 	usecase "my_project/internal/users/usecase"
 	reflect "reflect"
 
@@ -97,4 +98,19 @@ func (m *MockUserUsecase) UpdateUserProfile(ctx context.Context, userID string, 
 func (mr *MockUserUsecaseMockRecorder) UpdateUserProfile(ctx, userID, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUserProfile", reflect.TypeOf((*MockUserUsecase)(nil).UpdateUserProfile), ctx, userID, req)
+}
+
+// UploadAvatar mocks base method.
+func (m *MockUserUsecase) UploadAvatar(ctx context.Context, userID string, fileHeader *multipart.FileHeader) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UploadAvatar", ctx, userID, fileHeader)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UploadAvatar indicates an expected call of UploadAvatar.
+func (mr *MockUserUsecaseMockRecorder) UploadAvatar(ctx, userID, fileHeader any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadAvatar", reflect.TypeOf((*MockUserUsecase)(nil).UploadAvatar), ctx, userID, fileHeader)
 }

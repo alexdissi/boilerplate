@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 
+	uploadfiles "my_project/pkg/uploadfiles"
 	passwordValidator "my_project/pkg/validator"
 
 	"github.com/go-playground/validator/v10"
@@ -115,7 +116,18 @@ func (s *Server) setupPaymentRoutes(apiGroup *echo.Group) {
 
 func (s *Server) setupUsersRoutes(apiGroup *echo.Group) {
 	userStore := usersRepository.NewUserStore(s.db)
-	usersUseCase := usersUsecase.NewUserUsecase(userStore)
+	uploader, err := uploadfiles.NewUploader(uploadfiles.Config{
+		Endpoint:        os.Getenv("R3_ENDPOINT"),
+		AccessKeyID:     os.Getenv("R3_ACCESS_KEY_ID"),
+		SecretAccessKey: os.Getenv("R3_SECRET_ACCESS_KEY"),
+		BucketName:      os.Getenv("R3_BUCKET_NAME"),
+		Region:          os.Getenv("R3_REGION"),
+	})
+	if err != nil {
+		panic("failed to initialize R3 uploader: " + err.Error())
+	}
+
+	usersUseCase := usersUsecase.NewUserUsecase(userStore, uploader)
 	validator := validator.New()
 	validator.RegisterValidation("strongpassword", passwordValidator.ValidateStrongPassword)
 

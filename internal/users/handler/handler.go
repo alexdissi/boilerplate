@@ -27,6 +27,7 @@ func (h *UserHandler) Bind(e *echo.Group) {
 	e.PATCH("/me", h.UpdateUserProfile)
 	e.DELETE("/me", h.DeleteUser)
 	e.POST("/change-password", h.ChangePassword)
+	e.POST("/avatar", h.UploadAvatar)
 }
 
 func (h *UserHandler) GetUserProfile(c echo.Context) error {
@@ -130,4 +131,39 @@ func (h *UserHandler) DeleteUser(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"message": "User deleted successfully"})
+}
+func (h *UserHandler) UploadAvatar(c echo.Context) error {
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+	}
+	fileHeader, err := c.FormFile("avatar")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Avatar file is required"})
+	}
+
+	const maxFileSize = 3 * 1024 * 1024
+	if fileHeader.Size > maxFileSize {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "File size exceeds 3MB limit"})
+	}
+
+	ctx := c.Request().Context()
+	avatarURL, err := h.usecase.UploadAvatar(ctx, userID, fileHeader)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrInvalidUserID):
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid user ID"})
+		case errors.Is(err, domain.ErrInvalidFileFormat):
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid file format. Only JPG, JPEG, PNG, GIF, and WEBP are allowed"})
+		case errors.Is(err, domain.ErrUserNotFound):
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
+		default:
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to upload avatar"})
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{
+		"message":    "Avatar uploaded successfully",
+		"avatar_url": avatarURL,
+	})
 }
