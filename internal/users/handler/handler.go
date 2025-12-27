@@ -122,6 +122,8 @@ func (h *UserHandler) DeleteUser(c echo.Context) error {
 		switch {
 		case errors.Is(err, domain.ErrUserNotFound):
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
+		case errors.Is(err, domain.ErrInvalidUserID):
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid user ID"})
 		default:
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}

@@ -101,7 +101,7 @@ func (s *UserStore) UpdatePassword(ctx context.Context, userID uuid.UUID, passwo
 }
 
 func (s *UserStore) DeleteUser(ctx context.Context, userID uuid.UUID) error {
-	query := `UPDATE users SET is_active = false, deleted_at = NOW() + INTERVAL '6 months', updated_at = NOW() WHERE id = $1`
+	query := `UPDATE users SET is_active = false, deleted_at = NOW() + INTERVAL '6 months', updated_at = NOW() WHERE id = $1 AND is_active = true`
 
 	commandTag, err := s.db.Pool().Exec(ctx, query, userID)
 	if err != nil {
