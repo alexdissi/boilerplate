@@ -1,7 +1,6 @@
 package uploadfiles
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -55,19 +54,24 @@ func (u *Uploader) Upload(ctx context.Context, file multipart.File, header *mult
 		return "", fmt.Errorf("file size exceeds 3MB limit")
 	}
 
-	content, err := io.ReadAll(file)
-	if err != nil {
-		return "", fmt.Errorf("failed to read file: %w", err)
-	}
+	pr, pw := io.Pipe()
+
+	go func() {
+		defer pw.Close()
+		_, err := io.Copy(pw, file)
+		if err != nil {
+			pw.CloseWithError(err)
+		}
+	}()
 
 	ext := filepath.Ext(header.Filename)
 	timestamp := time.Now().Unix()
 	filename := fmt.Sprintf("%s/%d%s", folder, timestamp, ext)
 
-	_, err = u.client.PutObject(ctx, &s3.PutObjectInput{
+	_, err := u.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(u.bucket),
 		Key:         aws.String(filename),
-		Body:        bytes.NewReader(content),
+		Body:        pr,
 		ContentType: aws.String(header.Header.Get("Content-Type")),
 	})
 	if err != nil {

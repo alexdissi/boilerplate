@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type UserStore struct {
@@ -23,28 +22,19 @@ func NewUserStore(db database.Service) UserRepository {
 	}
 }
 
-func (s *UserStore) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
+func (s *UserStore) GetPublicProfileByID(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
 	query := `
-		SELECT id, email, first_name, last_name, profile_picture,
-			   last_login_at, is_active, password_hash, two_factor_enabled,
-			   two_factor_secret, recovery_codes
+		SELECT id, email, first_name, last_name, profile_picture
 		FROM users
-		WHERE id = $1`
+		WHERE id = $1 AND is_active = true`
 
-	user := &domain.User{}
-	var recoveryCodesArray pgtype.Array[string]
+	profile := &domain.User{}
 	err := s.db.Pool().QueryRow(ctx, query, userID).Scan(
-		&user.ID,
-		&user.Email,
-		&user.FirstName,
-		&user.LastName,
-		&user.ProfilePicture,
-		&user.LastLoginAt,
-		&user.IsActive,
-		&user.PasswordHash,
-		&user.TwoFactorEnabled,
-		&user.TwoFactorSecret,
-		&recoveryCodesArray,
+		&profile.ID,
+		&profile.Email,
+		&profile.FirstName,
+		&profile.LastName,
+		&profile.ProfilePicture,
 	)
 
 	if err != nil {
@@ -54,11 +44,7 @@ func (s *UserStore) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.
 		return nil, err
 	}
 
-	if recoveryCodesArray.Valid {
-		user.RecoveryCodes = recoveryCodesArray.Elements
-	}
-
-	return user, nil
+	return profile, nil
 }
 
 func (s *UserStore) UpdateUser(ctx context.Context, user *domain.User) (*domain.User, error) {

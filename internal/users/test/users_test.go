@@ -78,7 +78,7 @@ func TestUpdateUserProfile_Usecase(t *testing.T) {
 					updatedUser.LastName = *tt.req.LastName
 				}
 
-				mockRepo.EXPECT().GetUserByID(gomock.Any(), userUUID).Return(existingUser, nil)
+				mockRepo.EXPECT().GetPublicProfileByID(gomock.Any(), userUUID).Return(existingUser, nil)
 				mockRepo.EXPECT().UpdateUser(gomock.Any(), gomock.Any()).Return(&updatedUser, nil)
 
 				result, err := userUsecase.UpdateUserProfile(ctx, userID, tt.req)
@@ -235,7 +235,7 @@ func TestChangePassword_Usecase(t *testing.T) {
 			NewPassword:     newPassword,
 		}
 
-		mockRepo.EXPECT().GetUserByID(gomock.Any(), userUUID).Return(existingUser, nil)
+		mockRepo.EXPECT().GetPublicProfileByID(gomock.Any(), userUUID).Return(existingUser, nil)
 		mockRepo.EXPECT().UpdatePassword(gomock.Any(), userUUID, gomock.Any()).Return(nil)
 
 		err := userUsecase.ChangePassword(ctx, userID, req)
@@ -261,7 +261,7 @@ func TestChangePassword_Usecase(t *testing.T) {
 				userIDForTest: userID,
 				req:           usecase.ChangePasswordRequest{CurrentPassword: currentPassword, NewPassword: newPassword},
 				setupMock: func() {
-					mockRepo.EXPECT().GetUserByID(gomock.Any(), userUUID).Return(nil, domain.ErrUserNotFound)
+					mockRepo.EXPECT().GetPublicProfileByID(gomock.Any(), userUUID).Return(nil, domain.ErrUserNotFound)
 				},
 				expectedError: domain.ErrUserNotFound,
 			},
@@ -270,7 +270,7 @@ func TestChangePassword_Usecase(t *testing.T) {
 				userIDForTest: userID,
 				req:           usecase.ChangePasswordRequest{CurrentPassword: "wrongPassword", NewPassword: newPassword},
 				setupMock: func() {
-					mockRepo.EXPECT().GetUserByID(gomock.Any(), userUUID).Return(existingUser, nil)
+					mockRepo.EXPECT().GetPublicProfileByID(gomock.Any(), userUUID).Return(existingUser, nil)
 				},
 				expectedError: domain.ErrInvalidCurrentPassword,
 			},
@@ -279,7 +279,7 @@ func TestChangePassword_Usecase(t *testing.T) {
 				userIDForTest: userID,
 				req:           usecase.ChangePasswordRequest{CurrentPassword: currentPassword, NewPassword: newPassword},
 				setupMock: func() {
-					mockRepo.EXPECT().GetUserByID(gomock.Any(), userUUID).Return(existingUser, nil)
+					mockRepo.EXPECT().GetPublicProfileByID(gomock.Any(), userUUID).Return(existingUser, nil)
 					mockRepo.EXPECT().UpdatePassword(gomock.Any(), userUUID, gomock.Any()).Return(errors.New("database error"))
 				},
 				expectedError: errors.New("failed to update password: database error"),
