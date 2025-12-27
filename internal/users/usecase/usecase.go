@@ -7,4 +7,5 @@ type UserUsecase interface {
 	GetUserProfile(ctx context.Context, userID string) (UserProfileResponse, error)
 	UpdateUserProfile(ctx context.Context, userID string, req UpdateUserRequest) (UserProfileResponse, error)
 	ChangePassword(ctx context.Context, userID string, req ChangePasswordRequest) error
+	DeleteUser(ctx context.Context, userID string) error
 }

@@ -98,3 +98,18 @@ func (s *UserStore) UpdatePassword(ctx context.Context, userID uuid.UUID, passwo
 
 	return nil
 }
+
+func (s *UserStore) DeleteUser(ctx context.Context, userID uuid.UUID) error {
+	query := `UPDATE users SET is_active = false, updated_at = NOW() WHERE id = $1`
+
+	commandTag, err := s.db.Pool().Exec(ctx, query, userID)
+	if err != nil {
+		return err
+	}
+
+	if commandTag.RowsAffected() == 0 {
+		return domain.ErrUserNotFound
+	}
+
+	return nil
+}

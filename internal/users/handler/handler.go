@@ -25,6 +25,7 @@ func NewUserHandler(u usecase.UserUsecase, v *validator.Validate) *UserHandler {
 func (h *UserHandler) Bind(e *echo.Group) {
 	e.GET("/me", h.GetUserProfile)
 	e.PATCH("/me", h.UpdateUserProfile)
+	e.DELETE("/me", h.DeleteUser)
 	e.POST("/change-password", h.ChangePassword)
 }
 
@@ -107,4 +108,24 @@ func (h *UserHandler) ChangePassword(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"message": "Password changed successfully"})
+}
+
+func (h *UserHandler) DeleteUser(c echo.Context) error {
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+	}
+
+	ctx := c.Request().Context()
+	err := h.usecase.DeleteUser(ctx, userID)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrUserNotFound):
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "User not found"})
+		default:
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"message": "User deleted successfully"})
 }
