@@ -18,7 +18,8 @@ CREATE TABLE users (
     google_id TEXT UNIQUE,
     oauth_provider oauth_provider DEFAULT 'EMAIL',
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
 );
 
 CREATE TABLE sessions (
@@ -37,6 +38,7 @@ CREATE INDEX idx_users_active ON users(is_active) WHERE is_active = TRUE;
 CREATE INDEX idx_sessions_token ON sessions(session_token);
 CREATE INDEX idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX idx_sessions_user_expires ON sessions(user_id, expires_at);
+CREATE INDEX idx_users_deleted_at ON users(deleted_at) WHERE deleted_at IS NOT NULL;
 
 -- +goose Down
 DROP TABLE IF EXISTS sessions;
