@@ -8,10 +8,10 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"image/png"
 	"mime/multipart"
 	"slices"
 	"strings"
-	"image/png"
 
 	"my_project/internal/users/domain"
 	"my_project/internal/users/repository"
@@ -45,7 +45,7 @@ func (u *userUsecase) GetUserProfile(ctx context.Context, userID string) (UserPr
 		return UserProfileResponse{}, domain.ErrInvalidUserID
 	}
 
-	user, err := u.userRepo.GetUserByID(ctx, userUUID)
+	user, err := u.userRepo.GetPublicProfileByID(ctx, userUUID)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
 			logger.Error("user not found", err)
@@ -63,7 +63,7 @@ func (u *userUsecase) UpdateUserProfile(ctx context.Context, userID string, req 
 		return UserProfileResponse{}, domain.ErrInvalidUserID
 	}
 
-	user, err := u.userRepo.GetUserByID(ctx, userUUID)
+	user, err := u.userRepo.GetPublicProfileByID(ctx, userUUID)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
 			logger.Error("user not found", err)
@@ -97,7 +97,7 @@ func (u *userUsecase) ChangePassword(ctx context.Context, userID string, req Cha
 		return domain.ErrInvalidUserID
 	}
 
-	user, err := u.userRepo.GetUserByID(ctx, userUUID)
+	user, err := u.userRepo.GetPublicProfileByID(ctx, userUUID)
 	if err != nil {
 		logger.Error("failed to get user for password change", err)
 		if errors.Is(err, domain.ErrUserNotFound) {
@@ -163,7 +163,7 @@ func (u *userUsecase) UploadAvatar(ctx context.Context, userID string, fileHeade
 		return "", domain.ErrInvalidFileFormat
 	}
 
-	user, err := u.userRepo.GetUserByID(ctx, userUUID)
+	user, err := u.userRepo.GetPublicProfileByID(ctx, userUUID)
 	if err != nil {
 		logger.Error("failed to get user", err)
 		return "", err
@@ -225,7 +225,7 @@ func (u *userUsecase) SetupTwoFactor(ctx context.Context, userID string) (TwoFac
 		return TwoFactorSetupResponse{}, domain.ErrInvalidUserID
 	}
 
-	user, err := u.userRepo.GetUserByID(ctx, userUUID)
+	user, err := u.userRepo.GetPublicProfileByID(ctx, userUUID)
 	if err != nil {
 		logger.Error("failed to get user", err)
 		return TwoFactorSetupResponse{}, err
@@ -277,7 +277,7 @@ func (u *userUsecase) EnableTwoFactor(ctx context.Context, userID string, req En
 		return EnableTwoFactorResponse{}, domain.ErrInvalidUserID
 	}
 
-	user, err := u.userRepo.GetUserByID(ctx, userUUID)
+	user, err := u.userRepo.GetPublicProfileByID(ctx, userUUID)
 	if err != nil {
 		logger.Error("failed to get user", err)
 		return EnableTwoFactorResponse{}, err
@@ -313,7 +313,7 @@ func (u *userUsecase) DisableTwoFactor(ctx context.Context, userID string, req D
 		return domain.ErrInvalidUserID
 	}
 
-	user, err := u.userRepo.GetUserByID(ctx, userUUID)
+	user, err := u.userRepo.GetPublicProfileByID(ctx, userUUID)
 	if err != nil {
 		logger.Error("failed to get user", err)
 		return err

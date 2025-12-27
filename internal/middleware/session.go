@@ -3,15 +3,29 @@ package middleware
 import (
 	"net/http"
 	"os"
+	"time"
 
+	"github.com/bluele/gcache"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 )
 
-var dbPool *pgxpool.Pool
+type CachedSession struct {
+	UserID string
+	Email  string
+}
+
+var (
+	dbPool       *pgxpool.Pool
+	sessionCache = gcache.New(1000).LRU().Expiration(time.Minute * 15).Build()
+)
 
 func InitSessionMiddleware(pool *pgxpool.Pool) {
 	dbPool = pool
+}
+
+func InvalidateSessionCache(sessionToken string) {
+	sessionCache.Remove(sessionToken)
 }
 
 func CookieSessionMiddleware() echo.MiddlewareFunc {
@@ -25,6 +39,16 @@ func CookieSessionMiddleware() echo.MiddlewareFunc {
 			}
 
 			sessionToken := cookie.Value
+
+			cachedData, err := sessionCache.Get(sessionToken)
+			if err == nil {
+				session := cachedData.(CachedSession)
+				c.Set("session_token", sessionToken)
+				c.Set("user_id", session.UserID)
+				c.Set("email", session.Email)
+				return next(c)
+			}
+
 			ctx := c.Request().Context()
 
 			query := `
@@ -53,6 +77,11 @@ func CookieSessionMiddleware() echo.MiddlewareFunc {
 					"error": "invalid or expired session",
 				})
 			}
+
+			_ = sessionCache.Set(sessionToken, CachedSession{
+				UserID: userID,
+				Email:  email,
+			})
 
 			c.Set("session_token", sessionToken)
 			c.Set("user_id", userID)

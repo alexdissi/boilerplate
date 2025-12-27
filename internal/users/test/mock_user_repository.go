@@ -84,19 +84,19 @@ func (mr *MockUserRepositoryMockRecorder) EnableTwoFactor(ctx, userID, secret, r
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnableTwoFactor", reflect.TypeOf((*MockUserRepository)(nil).EnableTwoFactor), ctx, userID, secret, recoveryCodes)
 }
 
-// GetUserByID mocks base method.
-func (m *MockUserRepository) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
+// GetPublicProfileByID mocks base method.
+func (m *MockUserRepository) GetPublicProfileByID(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetUserByID", ctx, userID)
+	ret := m.ctrl.Call(m, "GetPublicProfileByID", ctx, userID)
 	ret0, _ := ret[0].(*domain.User)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetUserByID indicates an expected call of GetUserByID.
-func (mr *MockUserRepositoryMockRecorder) GetUserByID(ctx, userID any) *gomock.Call {
+// GetPublicProfileByID indicates an expected call of GetPublicProfileByID.
+func (mr *MockUserRepositoryMockRecorder) GetPublicProfileByID(ctx, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserByID", reflect.TypeOf((*MockUserRepository)(nil).GetUserByID), ctx, userID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPublicProfileByID", reflect.TypeOf((*MockUserRepository)(nil).GetPublicProfileByID), ctx, userID)
 }
 
 // UpdateAvatar mocks base method.

@@ -12,6 +12,7 @@ import (
 
 	"my_project/internal/auth/domain"
 	"my_project/internal/auth/repository"
+	sessionMiddleware "my_project/internal/middleware"
 	"my_project/pkg/logger"
 	"my_project/pkg/mailer"
 	"my_project/pkg/password"
@@ -180,6 +181,8 @@ func (s *UserService) LogoutUser(ctx context.Context, token string) (LogoutOutpu
 		logger.Error("Failed to delete session during logout")
 		return LogoutOutput{}, fmt.Errorf("failed to logout: %w", err)
 	}
+
+	sessionMiddleware.InvalidateSessionCache(token)
 
 	return LogoutOutput{Message: "Logged out successfully"}, nil
 }
