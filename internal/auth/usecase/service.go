@@ -2,12 +2,8 @@ package usecase
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"my_project/internal/auth/domain"
@@ -257,51 +253,6 @@ func (s *UserService) ResetPassword(ctx context.Context, input ResetPasswordInpu
 	return ResetPasswordOutput{
 		Message: "Password reset successful",
 	}, nil
-}
-
-func (s *UserService) getGoogleUserInfo(accessToken string) (*GoogleUserInfo, error) {
-	req, err := http.NewRequest("GET", "https://www.googleapis.com/oauth2/v2/userinfo", nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, domain.ErrOAuthTokenInvalid
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var googleUser GoogleUserInfo
-	err = json.Unmarshal(body, &googleUser)
-	if err != nil {
-		return nil, err
-	}
-
-	if googleUser.FirstName == "" && googleUser.LastName == "" && googleUser.Name != "" {
-		parts := strings.Fields(googleUser.Name)
-		if len(parts) >= 1 {
-			googleUser.FirstName = parts[0]
-		}
-		if len(parts) >= 2 {
-			googleUser.LastName = strings.Join(parts[1:], " ")
-		}
-	}
-
-	return &googleUser, nil
 }
 
 func (s *UserService) createSessionForExistingUser(ctx context.Context, user *domain.UserAuth, userAgent, ipAddress string) (GoogleAuthOutput, error) {
