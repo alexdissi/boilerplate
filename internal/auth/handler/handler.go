@@ -36,6 +36,10 @@ func (h *AuthHandler) RegisterUserHandler(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
 	}
 
+	if err := c.Validate(&req); err != nil {
+		return err
+	}
+
 	ctx := c.Request().Context()
 	output, err := h.usecase.RegisterUser(ctx, req)
 	if err != nil {
@@ -49,6 +53,10 @@ func (h *AuthHandler) LoginUserHandler(c echo.Context) error {
 	var req usecase.LoginUserInput
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
+	}
+
+	if err := c.Validate(&req); err != nil {
+		return err
 	}
 
 	ctx := c.Request().Context()
@@ -116,6 +124,10 @@ func (h *AuthHandler) ForgotPasswordHandler(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
 	}
 
+	if err := c.Validate(&req); err != nil {
+		return err
+	}
+
 	ctx := c.Request().Context()
 	output, err := h.usecase.ForgotPassword(ctx, req)
 	if err != nil {
@@ -129,6 +141,10 @@ func (h *AuthHandler) ResetPasswordHandler(c echo.Context) error {
 	var req usecase.ResetPasswordInput
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
+	}
+
+	if err := c.Validate(&req); err != nil {
+		return err
 	}
 
 	ctx := c.Request().Context()

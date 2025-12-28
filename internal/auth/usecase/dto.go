@@ -1,10 +1,10 @@
 package usecase
 
 type RegisterUserInput struct {
-	FirstName string `json:"firstName" form:"firstName"`
-	LastName  string `json:"lastName" form:"lastName"`
-	Email     string `json:"email" form:"email"`
-	Password  string `json:"password" form:"password"`
+	FirstName string `json:"firstName" form:"firstName" validate:"required"`
+	LastName  string `json:"lastName" form:"lastName" validate:"required"`
+	Email     string `json:"email" form:"email" validate:"required,email"`
+	Password  string `json:"password" form:"password" validate:"required,strongpassword"`
 }
 
 type RegisterUserOutput struct {
@@ -14,8 +14,8 @@ type RegisterUserOutput struct {
 }
 
 type LoginUserInput struct {
-	Email    string `json:"email" form:"email"`
-	Password string `json:"password" form:"password"`
+	Email    string `json:"email" form:"email" validate:"required,email"`
+	Password string `json:"password" form:"password" validate:"required"`
 }
 
 type LoginUserOutput struct {
@@ -42,7 +42,7 @@ type LogoutOutput struct {
 }
 
 type ForgotPasswordInput struct {
-	Email string `json:"email" form:"email"`
+	Email string `json:"email" form:"email" validate:"required,email"`
 }
 
 type ForgotPasswordOutput struct {
@@ -50,8 +50,8 @@ type ForgotPasswordOutput struct {
 }
 
 type ResetPasswordInput struct {
-	Token    string `json:"token" form:"token"`
-	Password string `json:"password" form:"password"`
+	Token    string `json:"token" form:"token" validate:"required"`
+	Password string `json:"password" form:"password" validate:"required,strongpassword"`
 }
 
 type ResetPasswordOutput struct {

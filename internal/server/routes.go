@@ -24,8 +24,23 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 )
 
+type CustomValidator struct {
+	validator *validator.Validate
+}
+
+func (cv *CustomValidator) Validate(i interface{}) error {
+	if err := cv.validator.Struct(i); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	return nil
+}
+
 func (s *Server) RegisterRoutes() http.Handler {
 	e := echo.New()
+	v := validator.New()
+	passwordValidator.RegisterPasswordValidation(v)
+	e.Validator = &CustomValidator{validator: v}
+
 	crypto.SetEncryptionKey(os.Getenv("TWO_FACTOR_ENCRYPTION_KEY"))
 	e.Use(middleware.RequestLogger())
 	e.Use(middleware.Recover())
@@ -130,10 +145,7 @@ func (s *Server) setupUsersRoutes(apiGroup *echo.Group) {
 	}
 
 	usersUseCase := usersUsecase.NewUserUsecase(userStore, uploader)
-	validator := validator.New()
-	validator.RegisterValidation("strongpassword", passwordValidator.ValidateStrongPassword)
-
-	usersHandler := usersHandler.NewUserHandler(usersUseCase, validator)
+	usersHandler := usersHandler.NewUserHandler(usersUseCase)
 
 	usersGroup := apiGroup.Group("/users", sessionMiddleware.CookieSessionMiddleware())
 

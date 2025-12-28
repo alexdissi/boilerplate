@@ -6,19 +6,16 @@ import (
 	"my_project/internal/users/usecase"
 	"net/http"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
 )
 
 type UserHandler struct {
-	usecase   usecase.UserUsecase
-	validator *validator.Validate
+	usecase usecase.UserUsecase
 }
 
-func NewUserHandler(u usecase.UserUsecase, v *validator.Validate) *UserHandler {
+func NewUserHandler(u usecase.UserUsecase) *UserHandler {
 	return &UserHandler{
-		usecase:   u,
-		validator: v,
+		usecase: u,
 	}
 }
 
@@ -58,8 +55,8 @@ func (h *UserHandler) UpdateUserProfile(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
 	}
 
-	if err := h.validator.Struct(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Validation failed: " + err.Error()})
+	if err := c.Validate(&req); err != nil {
+		return err
 	}
 
 	if req.Email == nil && req.FirstName == nil && req.LastName == nil {
@@ -86,8 +83,8 @@ func (h *UserHandler) ChangePassword(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
 	}
 
-	if err := h.validator.Struct(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Validation failed: " + err.Error()})
+	if err := c.Validate(&req); err != nil {
+		return err
 	}
 
 	if req.CurrentPassword == req.NewPassword {
@@ -204,8 +201,8 @@ func (h *UserHandler) EnableTwoFactor(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
 	}
 
-	if err := h.validator.Struct(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Validation failed"})
+	if err := c.Validate(&req); err != nil {
+		return err
 	}
 
 	ctx := c.Request().Context()
@@ -237,8 +234,8 @@ func (h *UserHandler) DisableTwoFactor(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request format"})
 	}
 
-	if err := h.validator.Struct(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Validation failed"})
+	if err := c.Validate(&req); err != nil {
+		return err
 	}
 
 	ctx := c.Request().Context()
