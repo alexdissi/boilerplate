@@ -33,11 +33,6 @@ func NewUserService(r repository.UserRepository, m mailer.Mailer) UserUsecase {
 }
 
 func (s *UserService) RegisterUser(ctx context.Context, input RegisterUserInput) (RegisterUserOutput, error) {
-	if !domain.IsValidPassword(input.Password) {
-		logger.Error("Password validation failed - format requirements not met")
-		return RegisterUserOutput{}, domain.ErrInvalidUserPasswordFormat
-	}
-
 	exists, err := s.repo.UserExistsByEmail(ctx, input.Email)
 	if err != nil {
 		logger.Error("Repository error checking user existence")
@@ -226,10 +221,6 @@ func (s *UserService) ForgotPassword(ctx context.Context, input ForgotPasswordIn
 func (s *UserService) ResetPassword(ctx context.Context, input ResetPasswordInput) (ResetPasswordOutput, error) {
 	if input.Token == "" {
 		return ResetPasswordOutput{}, domain.ErrInvalidCredentials
-	}
-
-	if !domain.IsValidPassword(input.Password) {
-		return ResetPasswordOutput{}, domain.ErrInvalidUserPasswordFormat
 	}
 
 	user, err := s.repo.GetUserByResetToken(ctx, input.Token)
