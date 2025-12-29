@@ -8,16 +8,18 @@ import (
 )
 
 type UserAuth struct {
-	ID             uuid.UUID
-	Email          string
-	PasswordHash   string
-	FirstName      string
-	LastName       string
-	ProfilePicture string
-	LastLoginAt    *time.Time
-	IsActive       bool
-	GoogleID       string
-	OAuthProvider  OAuthProvider
+	ID               uuid.UUID
+	Email            string
+	PasswordHash     string
+	FirstName        string
+	LastName         string
+	ProfilePicture   string
+	LastLoginAt      *time.Time
+	IsActive         bool
+	GoogleID         string
+	OAuthProvider    OAuthProvider
+	TwoFactorEnabled bool
+	TwoFactorSecret  *string
 }
 
 type AuthSubscription struct {
@@ -55,17 +57,6 @@ func (u *UserAuth) Validate() error {
 
 func IsValidEmail(email string) bool {
 	return emailRegex.MatchString(email)
-}
-
-func IsValidPassword(password string) bool {
-	if len(password) < MinPasswordLength {
-		return false
-	}
-
-	return passwordHasLowercase.MatchString(password) &&
-		passwordHasUppercase.MatchString(password) &&
-		passwordHasDigit.MatchString(password) &&
-		passwordHasSpecial.MatchString(password)
 }
 
 func GenerateProfilePicture(firstName, lastName string) string {

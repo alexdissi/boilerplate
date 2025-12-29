@@ -17,4 +17,6 @@ var (
 	ErrOAuthTokenInvalid         = errors.New("invalid OAuth token")
 	ErrOAuthUserNotFound         = errors.New("user not found with OAuth provider")
 	ErrOAuthEmailRequired        = errors.New("email is required from OAuth provider")
+	ErrTwoFactorNotEnabled       = errors.New("two-factor authentication is not enabled")
+	ErrInvalidTwoFactorCode      = errors.New("invalid two-factor code")
 )

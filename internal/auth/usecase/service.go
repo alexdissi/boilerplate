@@ -9,11 +9,13 @@ import (
 	"my_project/internal/auth/domain"
 	"my_project/internal/auth/repository"
 	sessionMiddleware "my_project/internal/middleware"
+	"my_project/pkg/crypto"
 	"my_project/pkg/logger"
 	"my_project/pkg/mailer"
 	"my_project/pkg/password"
 
 	"github.com/bluele/gcache"
+	"github.com/pquerna/otp/totp"
 )
 
 type UserService struct {
@@ -120,6 +122,17 @@ func (s *UserService) LoginUser(ctx context.Context, input LoginUserInput, userA
 
 	s.cache.Remove(input.Email)
 
+	if user.TwoFactorEnabled {
+		return LoginUserOutput{
+			User: UserInfo{
+				ID:    user.ID.String(),
+				Email: user.Email,
+			},
+			Message:           "Two-factor authentication required",
+			RequiresTwoFactor: true,
+		}, nil
+	}
+
 	err = s.repo.UpdateLastLoginAt(ctx, user.ID)
 	if err != nil {
 		logger.Error("Failed to update last login timestamp:", err)
@@ -147,17 +160,71 @@ func (s *UserService) LoginUser(ctx context.Context, input LoginUserInput, userA
 
 	return LoginUserOutput{
 		User: UserInfo{
-			ID:             user.ID.String(),
-			Email:          user.Email,
-			FirstName:      user.FirstName,
-			LastName:       user.LastName,
-			ProfilePicture: user.ProfilePicture,
+			ID:    user.ID.String(),
+			Email: user.Email,
 		},
 		Session: SessionInfo{
 			Token:     session.SessionToken,
 			ExpiresAt: session.ExpiresAt.Format(time.RFC3339),
 		},
-		Message: "Login successful",
+		Message:           "Login successful",
+		RequiresTwoFactor: false,
+	}, nil
+}
+
+func (s *UserService) VerifyTwoFactor(ctx context.Context, input VerifyTwoFactorInput, userAgent, ipAddress string) (VerifyTwoFactorOutput, error) {
+	user, err := s.repo.GetUserByEmail(ctx, input.Email)
+	if err != nil {
+		logger.Error("Repository error fetching user:", err)
+		return VerifyTwoFactorOutput{}, domain.ErrInvalidCredentials
+	}
+
+	if !user.TwoFactorEnabled {
+		return VerifyTwoFactorOutput{}, domain.ErrTwoFactorNotEnabled
+	}
+
+	decryptedSecret, err := crypto.DecryptSecret(*user.TwoFactorSecret)
+	if err != nil {
+		logger.Error("Failed to decrypt 2FA secret:", err)
+		return VerifyTwoFactorOutput{}, domain.ErrInvalidTwoFactorCode
+	}
+
+	valid := totp.Validate(input.Code, decryptedSecret)
+	if !valid {
+		return VerifyTwoFactorOutput{}, domain.ErrInvalidTwoFactorCode
+	}
+
+	err = s.repo.UpdateLastLoginAt(ctx, user.ID)
+	if err != nil {
+		logger.Error("Failed to update last login timestamp:", err)
+	}
+
+	token, err := domain.GenerateSecureToken()
+	if err != nil {
+		logger.Error("Failed to generate session token:", err)
+		return VerifyTwoFactorOutput{}, fmt.Errorf("failed to generate session token: %w", err)
+	}
+
+	session := &domain.Session{
+		UserID:       user.ID,
+		SessionToken: token,
+		IpAddress:    ipAddress,
+		UserAgent:    userAgent,
+		ExpiresAt:    time.Now().Add(domain.SessionDurationMinutes * time.Minute),
+		CreatedAt:    time.Now(),
+	}
+
+	if err := s.repo.CreateSession(ctx, session); err != nil {
+		logger.Error("Failed to store session in database")
+		return VerifyTwoFactorOutput{}, fmt.Errorf("failed to store session: %w", err)
+	}
+
+	return VerifyTwoFactorOutput{
+		Session: SessionInfo{
+			Token:     session.SessionToken,
+			ExpiresAt: session.ExpiresAt.Format(time.RFC3339),
+		},
+		Message: "Two-factor verification successful",
 	}, nil
 }
 
@@ -274,11 +341,8 @@ func (s *UserService) createSessionForExistingUser(ctx context.Context, user *do
 
 	return GoogleAuthOutput{
 		User: UserInfo{
-			ID:             user.ID.String(),
-			Email:          user.Email,
-			FirstName:      user.FirstName,
-			LastName:       user.LastName,
-			ProfilePicture: user.ProfilePicture,
+			ID:    user.ID.String(),
+			Email: user.Email,
 		},
 		Session: SessionInfo{
 			Token:     session.SessionToken,

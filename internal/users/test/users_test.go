@@ -14,9 +14,7 @@ import (
 	"my_project/internal/users/usecase"
 	"my_project/pkg/logger"
 	"my_project/pkg/password"
-	"my_project/pkg/validator"
 
-	validatorV10 "github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -104,8 +102,7 @@ func TestUpdateUserProfile_Handler(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockUsecase := NewMockUserUsecase(ctrl)
-	validate := validatorV10.New()
-	userHandler := handler.NewUserHandler(mockUsecase, validate)
+	userHandler := handler.NewUserHandler(mockUsecase)
 
 	e := echo.New()
 	userID := uuid.New().String()
@@ -312,9 +309,7 @@ func TestChangePassword_Handler(t *testing.T) {
 	logger.Init()
 
 	mockUsecase := NewMockUserUsecase(ctrl)
-	validate := validatorV10.New()
-	validator.RegisterPasswordValidation(validate)
-	userHandler := handler.NewUserHandler(mockUsecase, validate)
+	userHandler := handler.NewUserHandler(mockUsecase)
 
 	e := echo.New()
 	userID := uuid.New().String()
@@ -479,8 +474,7 @@ func TestDeleteUser_Handler(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockUsecase := NewMockUserUsecase(ctrl)
-	validate := validatorV10.New()
-	userHandler := handler.NewUserHandler(mockUsecase, validate)
+	userHandler := handler.NewUserHandler(mockUsecase)
 
 	e := echo.New()
 	userID := uuid.New().String()
