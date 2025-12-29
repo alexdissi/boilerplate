@@ -19,17 +19,15 @@ type LoginUserInput struct {
 }
 
 type LoginUserOutput struct {
-	User    UserInfo    `json:"user"`
-	Session SessionInfo `json:"session"`
-	Message string      `json:"message"`
+	User              UserInfo    `json:"user"`
+	Session           SessionInfo `json:"session,omitempty"`
+	Message           string      `json:"message"`
+	RequiresTwoFactor bool        `json:"requiresTwoFactor"`
 }
 
 type UserInfo struct {
-	ID             string `json:"id"`
-	Email          string `json:"email"`
-	FirstName      string `json:"firstName"`
-	LastName       string `json:"lastName"`
-	ProfilePicture string `json:"profilePicture"`
+	ID    string `json:"id"`
+	Email string `json:"email"`
 }
 
 type SessionInfo struct {
@@ -56,4 +54,14 @@ type ResetPasswordInput struct {
 
 type ResetPasswordOutput struct {
 	Message string `json:"message"`
+}
+
+type VerifyTwoFactorInput struct {
+	Email string `json:"email" form:"email" validate:"required,email"`
+	Code  string `json:"code" form:"code" validate:"required,len=6"`
+}
+
+type VerifyTwoFactorOutput struct {
+	Session SessionInfo `json:"session"`
+	Message string      `json:"message"`
 }

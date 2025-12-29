@@ -68,7 +68,7 @@ func (s *UserStore) UserExistsByEmail(ctx context.Context, email string) (bool, 
 }
 
 func (s *UserStore) GetUserByEmail(ctx context.Context, email string) (*domain.UserAuth, error) {
-	query := `SELECT id, email, password_hash, first_name, last_name, profile_picture, last_login_at, is_active
+	query := `SELECT id, email, password_hash, first_name, last_name, profile_picture, last_login_at, is_active, two_factor_enabled, two_factor_secret, recovery_codes
 			  FROM users WHERE email = $1`
 
 	user := &domain.UserAuth{}
@@ -81,6 +81,9 @@ func (s *UserStore) GetUserByEmail(ctx context.Context, email string) (*domain.U
 		&user.ProfilePicture,
 		&user.LastLoginAt,
 		&user.IsActive,
+		&user.TwoFactorEnabled,
+		&user.TwoFactorSecret,
+		&user.RecoveryCodes,
 	)
 	if err != nil {
 		return nil, err
