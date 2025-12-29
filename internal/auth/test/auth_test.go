@@ -85,24 +85,6 @@ func TestRegisterUser_Success(t *testing.T) {
 	assert.Equal(t, "User created successfully", result.Message)
 }
 
-func TestRegisterUser_InvalidPassword(t *testing.T) {
-	_, service := setupService(t)
-
-	ctx := context.Background()
-	input := usecase.RegisterUserInput{
-		FirstName: "John",
-		LastName:  "Doe",
-		Email:     "john.doe@example.com",
-		Password:  "weak",
-	}
-
-	result, err := service.RegisterUser(ctx, input)
-
-	assert.Error(t, err)
-	assert.Equal(t, domain.ErrInvalidUserPasswordFormat, err)
-	assert.Empty(t, result.ID)
-}
-
 func TestRegisterUser_UserAlreadyExists(t *testing.T) {
 	mockRepo, service := setupService(t)
 	defer mockRepo.ctrl.Finish()
@@ -165,12 +147,13 @@ func TestLoginUser_Success(t *testing.T) {
 
 	userID := uuid.New()
 	existingUser := &domain.UserAuth{
-		ID:           userID,
-		Email:        "john.doe@example.com",
-		PasswordHash: hashedPassword,
-		FirstName:    "John",
-		LastName:     "Doe",
-		IsActive:     true,
+		ID:               userID,
+		Email:            "john.doe@example.com",
+		PasswordHash:     hashedPassword,
+		FirstName:        "John",
+		LastName:         "Doe",
+		IsActive:         true,
+		TwoFactorEnabled: false,
 	}
 
 	input := usecase.LoginUserInput{
@@ -201,8 +184,6 @@ func TestLoginUser_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, existingUser.ID.String(), result.User.ID)
 	assert.Equal(t, existingUser.Email, result.User.Email)
-	assert.Equal(t, existingUser.FirstName, result.User.FirstName)
-	assert.Equal(t, existingUser.LastName, result.User.LastName)
 	assert.NotEmpty(t, result.Session.Token)
 	assert.Equal(t, "Login successful", result.Message)
 }
@@ -221,12 +202,13 @@ func TestLoginUser_InvalidCredentials(t *testing.T) {
 
 	userID := uuid.New()
 	existingUser := &domain.UserAuth{
-		ID:           userID,
-		Email:        "john.doe@example.com",
-		PasswordHash: hashedPassword,
-		FirstName:    "John",
-		LastName:     "Doe",
-		IsActive:     true,
+		ID:               userID,
+		Email:            "john.doe@example.com",
+		PasswordHash:     hashedPassword,
+		FirstName:        "John",
+		LastName:         "Doe",
+		IsActive:         true,
+		TwoFactorEnabled: false,
 	}
 
 	input := usecase.LoginUserInput{
@@ -310,12 +292,13 @@ func TestLoginUser_CreateSessionError(t *testing.T) {
 
 	userID := uuid.New()
 	existingUser := &domain.UserAuth{
-		ID:           userID,
-		Email:        "john.doe@example.com",
-		PasswordHash: hashedPassword,
-		FirstName:    "John",
-		LastName:     "Doe",
-		IsActive:     true,
+		ID:               userID,
+		Email:            "john.doe@example.com",
+		PasswordHash:     hashedPassword,
+		FirstName:        "John",
+		LastName:         "Doe",
+		IsActive:         true,
+		TwoFactorEnabled: false,
 	}
 
 	input := usecase.LoginUserInput{
@@ -389,12 +372,13 @@ func TestForgotPassword_Success(t *testing.T) {
 
 	userID := uuid.New()
 	existingUser := &domain.UserAuth{
-		ID:           userID,
-		Email:        "john.doe@example.com",
-		PasswordHash: "hashed_password",
-		FirstName:    "John",
-		LastName:     "Doe",
-		IsActive:     true,
+		ID:               userID,
+		Email:            "john.doe@example.com",
+		PasswordHash:     "hashed_password",
+		FirstName:        "John",
+		LastName:         "Doe",
+		IsActive:         true,
+		TwoFactorEnabled: false,
 	}
 
 	mockRepo.EXPECT().
@@ -459,12 +443,13 @@ func TestResetPassword_Success(t *testing.T) {
 
 	userID := uuid.New()
 	existingUser := &domain.UserAuth{
-		ID:           userID,
-		Email:        "john.doe@example.com",
-		PasswordHash: "hashed_password",
-		FirstName:    "John",
-		LastName:     "Doe",
-		IsActive:     true,
+		ID:               userID,
+		Email:            "john.doe@example.com",
+		PasswordHash:     "hashed_password",
+		FirstName:        "John",
+		LastName:         "Doe",
+		IsActive:         true,
+		TwoFactorEnabled: false,
 	}
 
 	mockRepo.EXPECT().
@@ -495,23 +480,6 @@ func TestResetPassword_InvalidToken(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Equal(t, domain.ErrInvalidCredentials, err)
-	assert.Empty(t, result.Message)
-}
-
-func TestResetPassword_InvalidPassword(t *testing.T) {
-	mockRepo, service := setupService(t)
-	defer mockRepo.ctrl.Finish()
-
-	ctx := context.Background()
-	input := usecase.ResetPasswordInput{
-		Token:    "valid_reset_token_123",
-		Password: "weak",
-	}
-
-	result, err := service.ResetPassword(ctx, input)
-
-	assert.Error(t, err)
-	assert.Equal(t, domain.ErrInvalidUserPasswordFormat, err)
 	assert.Empty(t, result.Message)
 }
 

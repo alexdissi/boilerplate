@@ -8,19 +8,18 @@ import (
 )
 
 type UserAuth struct {
-	ID                uuid.UUID
-	Email             string
-	PasswordHash      string
-	FirstName         string
-	LastName          string
-	ProfilePicture    string
-	LastLoginAt       *time.Time
-	IsActive          bool
-	GoogleID          string
-	OAuthProvider     OAuthProvider
-	TwoFactorEnabled  bool
-	TwoFactorSecret   *string
-	RecoveryCodes     []string
+	ID               uuid.UUID
+	Email            string
+	PasswordHash     string
+	FirstName        string
+	LastName         string
+	ProfilePicture   string
+	LastLoginAt      *time.Time
+	IsActive         bool
+	GoogleID         string
+	OAuthProvider    OAuthProvider
+	TwoFactorEnabled bool
+	TwoFactorSecret  *string
 }
 
 type AuthSubscription struct {
