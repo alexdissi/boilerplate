@@ -382,7 +382,7 @@ func (s *UserService) LoginWithGoogleInfo(ctx context.Context, googleUser *Googl
 		return s.createSessionForExistingUser(ctx, user, userAgent, ipAddress)
 	}
 
-	user, err = s.repo.GetUserByEmail(ctx, googleUser.Email)
+	_, err = s.repo.GetUserByEmail(ctx, googleUser.Email)
 	if err == nil {
 		// Account exists with this email but not linked to Google
 		// For security reasons, we don't auto-link accounts
