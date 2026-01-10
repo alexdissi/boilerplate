@@ -120,11 +120,11 @@ func (s *UserService) LoginUser(ctx context.Context, input LoginUserInput, userA
 	if user.TwoFactorEnabled {
 		return LoginUserOutput{
 			User: UserInfo{
-				ID:    user.ID.String(),
-				Email: user.Email,
+				ID:               user.ID.String(),
+				Email:            user.Email,
+				TwoFactorEnabled: user.TwoFactorEnabled,
 			},
-			Message:           "Two-factor authentication required",
-			RequiresTwoFactor: true,
+			Message: "Two-factor authentication required",
 		}, nil
 	}
 
@@ -155,15 +155,15 @@ func (s *UserService) LoginUser(ctx context.Context, input LoginUserInput, userA
 
 	return LoginUserOutput{
 		User: UserInfo{
-			ID:    user.ID.String(),
-			Email: user.Email,
+			ID:               user.ID.String(),
+			Email:            user.Email,
+			TwoFactorEnabled: user.TwoFactorEnabled,
 		},
-		Session: SessionInfo{
+		Session: &SessionInfo{
 			Token:     session.SessionToken,
 			ExpiresAt: session.ExpiresAt.Format(time.RFC3339),
 		},
-		Message:           "Login successful",
-		RequiresTwoFactor: false,
+		Message: "Login successful",
 	}, nil
 }
 
@@ -178,7 +178,6 @@ func (s *UserService) VerifyTwoFactor(ctx context.Context, input VerifyTwoFactor
 		return VerifyTwoFactorOutput{}, domain.ErrTwoFactorNotEnabled
 	}
 
-	// Get 2FA data from separate table
 	twoFactor, err := s.repo.GetUserTwoFactor(ctx, user.ID)
 	if err != nil {
 		logger.Error("Failed to get 2FA data:", err)
@@ -222,7 +221,7 @@ func (s *UserService) VerifyTwoFactor(ctx context.Context, input VerifyTwoFactor
 	}
 
 	return VerifyTwoFactorOutput{
-		Session: SessionInfo{
+		Session: &SessionInfo{
 			Token:     session.SessionToken,
 			ExpiresAt: session.ExpiresAt.Format(time.RFC3339),
 		},
@@ -365,7 +364,7 @@ func (s *UserService) createSessionForExistingUser(ctx context.Context, user *do
 			ID:    user.ID.String(),
 			Email: user.Email,
 		},
-		Session: SessionInfo{
+		Session: &SessionInfo{
 			Token:     session.SessionToken,
 			ExpiresAt: session.ExpiresAt.Format(time.RFC3339),
 		},

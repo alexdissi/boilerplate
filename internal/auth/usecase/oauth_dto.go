@@ -6,9 +6,9 @@ type GoogleAuthInput struct {
 }
 
 type GoogleAuthOutput struct {
-	User    UserInfo    `json:"user"`
-	Session SessionInfo `json:"session"`
-	Message string      `json:"message"`
+	User    UserInfo     `json:"user"`
+	Session *SessionInfo `json:"-"` // Never expose session in JSON (token sent via HttpOnly cookie)
+	Message string       `json:"message"`
 }
 
 type GoogleUserInfo struct {

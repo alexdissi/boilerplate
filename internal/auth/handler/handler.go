@@ -44,7 +44,20 @@ func (h *AuthHandler) RegisterUserHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	output, err := h.usecase.RegisterUser(ctx, req)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		switch {
+		case errors.Is(err, domain.ErrUserAlreadyExists):
+			return c.JSON(http.StatusConflict, map[string]string{"error": "A user with this email already exists"})
+		case errors.Is(err, domain.ErrInvalidUserEmail),
+			errors.Is(err, domain.ErrInvalidUserEmailFormat),
+			errors.Is(err, domain.ErrInvalidUserPassword),
+			errors.Is(err, domain.ErrInvalidUserPasswordFormat),
+			errors.Is(err, domain.ErrInvalidUserName),
+			errors.Is(err, domain.ErrInvalidUserNameLength):
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		default:
+			logger.Error("Unexpected error in RegisterUserHandler:", err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+		}
 	}
 
 	return c.JSON(http.StatusCreated, output)
@@ -76,7 +89,7 @@ func (h *AuthHandler) LoginUserHandler(c echo.Context) error {
 		}
 	}
 
-	if !output.RequiresTwoFactor && output.Session.Token != "" {
+	if !output.User.TwoFactorEnabled && output.Session != nil && output.Session.Token != "" {
 		cookie := &http.Cookie{
 			Name:     "session_token",
 			Value:    output.Session.Token,
@@ -120,7 +133,7 @@ func (h *AuthHandler) VerifyTwoFactorHandler(c echo.Context) error {
 		}
 	}
 
-	if output.Session.Token != "" {
+	if output.Session != nil && output.Session.Token != "" {
 		cookie := &http.Cookie{
 			Name:     "session_token",
 			Value:    output.Session.Token,
@@ -179,8 +192,11 @@ func (h *AuthHandler) ForgotPasswordHandler(c echo.Context) error {
 		switch {
 		case errors.Is(err, domain.ErrTooManyForgotPasswordAttempts):
 			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "Too many password reset requests, please try again later"})
-		default:
+		case errors.Is(err, domain.ErrInvalidUserEmail), errors.Is(err, domain.ErrInvalidUserEmailFormat):
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		default:
+			logger.Error("Unexpected error in ForgotPasswordHandler:", err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
 		}
 	}
 
@@ -200,7 +216,15 @@ func (h *AuthHandler) ResetPasswordHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	output, err := h.usecase.ResetPassword(ctx, req)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		switch {
+		case errors.Is(err, domain.ErrInvalidCredentials):
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid or expired reset token"})
+		case errors.Is(err, domain.ErrInvalidUserPassword), errors.Is(err, domain.ErrInvalidUserPasswordFormat):
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		default:
+			logger.Error("Unexpected error in ResetPasswordHandler:", err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+		}
 	}
 
 	return c.JSON(http.StatusOK, output)
