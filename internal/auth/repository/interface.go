@@ -16,6 +16,8 @@ type UserRepository interface {
 	GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.UserAuth, error)
 	CreateSession(ctx context.Context, session *domain.Session) error
 	DeleteSessionByToken(ctx context.Context, token string) error
+	DeleteAllSessionsByUserID(ctx context.Context, userID uuid.UUID) error
+	DeleteExpiredSessions(ctx context.Context) (int64, error)
 	GetSessionByToken(ctx context.Context, token string) (*domain.Session, error)
 	GetUserByGoogleID(ctx context.Context, googleID string) (*domain.UserAuth, error)
 	UpdateGoogleOAuth(ctx context.Context, userID uuid.UUID, googleID string, provider domain.OAuthProvider) error
@@ -23,5 +25,10 @@ type UserRepository interface {
 	GetUserByResetToken(ctx context.Context, token string) (*domain.UserAuth, error)
 	ResetPassword(ctx context.Context, userID uuid.UUID, newPasswordHash string) error
 	UpdateLastLoginAt(ctx context.Context, userID uuid.UUID) error
-	CreateSubscription(ctx context.Context, subscription *domain.AuthSubscription) error
+
+	// Two Factor methods
+	GetUserTwoFactor(ctx context.Context, userID uuid.UUID) (*domain.UserTwoFactor, error)
+	CreateUserTwoFactor(ctx context.Context, twoFactor *domain.UserTwoFactor) error
+	UpdateUserTwoFactor(ctx context.Context, twoFactor *domain.UserTwoFactor) error
+	DeleteUserTwoFactor(ctx context.Context, userID uuid.UUID) error
 }

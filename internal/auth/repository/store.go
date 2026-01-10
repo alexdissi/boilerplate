@@ -68,7 +68,8 @@ func (s *UserStore) UserExistsByEmail(ctx context.Context, email string) (bool, 
 }
 
 func (s *UserStore) GetUserByEmail(ctx context.Context, email string) (*domain.UserAuth, error) {
-	query := `SELECT id, email, password_hash, first_name, last_name, profile_picture, last_login_at, is_active, two_factor_enabled, two_factor_secret
+	query := `SELECT id, email, password_hash, first_name, last_name, profile_picture,
+			         last_login_at, is_active, two_factor_enabled
 			  FROM users WHERE email = $1`
 
 	user := &domain.UserAuth{}
@@ -82,7 +83,6 @@ func (s *UserStore) GetUserByEmail(ctx context.Context, email string) (*domain.U
 		&user.LastLoginAt,
 		&user.IsActive,
 		&user.TwoFactorEnabled,
-		&user.TwoFactorSecret,
 	)
 	if err != nil {
 		return nil, err
@@ -92,7 +92,7 @@ func (s *UserStore) GetUserByEmail(ctx context.Context, email string) (*domain.U
 }
 
 func (s *UserStore) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.UserAuth, error) {
-	query := `SELECT id, email, password_hash, first_name, last_name, profile_picture, last_login_at, is_active, google_id, oauth_provider
+	query := `SELECT id, email, password_hash, first_name, last_name, profile_picture, last_login_at, is_active, google_id, oauth_provider, two_factor_enabled
 			  FROM users WHERE id = $1`
 
 	user := &domain.UserAuth{}
@@ -107,6 +107,7 @@ func (s *UserStore) GetUserByID(ctx context.Context, userID uuid.UUID) (*domain.
 		&user.IsActive,
 		&user.GoogleID,
 		&user.OAuthProvider,
+		&user.TwoFactorEnabled,
 	)
 	if err != nil {
 		return nil, err
@@ -145,8 +146,26 @@ func (s *UserStore) DeleteSessionByToken(ctx context.Context, token string) erro
 	return nil
 }
 
+func (s *UserStore) DeleteAllSessionsByUserID(ctx context.Context, userID uuid.UUID) error {
+	query := `DELETE FROM sessions WHERE user_id = $1`
+
+	_, err := s.db.Pool().Exec(ctx, query, userID)
+	return err
+}
+
+func (s *UserStore) DeleteExpiredSessions(ctx context.Context) (int64, error) {
+	query := `DELETE FROM sessions WHERE expires_at < NOW()`
+
+	commandTag, err := s.db.Pool().Exec(ctx, query)
+	if err != nil {
+		return 0, err
+	}
+
+	return commandTag.RowsAffected(), nil
+}
+
 func (s *UserStore) GetUserByGoogleID(ctx context.Context, googleID string) (*domain.UserAuth, error) {
-	query := `SELECT id, email, password_hash, first_name, last_name, profile_picture, last_login_at, is_active, google_id, oauth_provider
+	query := `SELECT id, email, password_hash, first_name, last_name, profile_picture, last_login_at, is_active, google_id, oauth_provider, two_factor_enabled
 			  FROM users WHERE google_id = $1 AND is_active = true`
 
 	user := &domain.UserAuth{}
@@ -161,6 +180,7 @@ func (s *UserStore) GetUserByGoogleID(ctx context.Context, googleID string) (*do
 		&user.IsActive,
 		&user.GoogleID,
 		&user.OAuthProvider,
+		&user.TwoFactorEnabled,
 	)
 	if err != nil {
 		return nil, err
@@ -207,7 +227,7 @@ func (s *UserStore) SetResetPasswordToken(ctx context.Context, email, token stri
 }
 
 func (s *UserStore) GetUserByResetToken(ctx context.Context, token string) (*domain.UserAuth, error) {
-	query := `SELECT id, email, password_hash, first_name, last_name, profile_picture, last_login_at, is_active
+	query := `SELECT id, email, password_hash, first_name, last_name, profile_picture, last_login_at, is_active, two_factor_enabled
 			  FROM users
 			  WHERE reset_password_token = $1
 			  AND reset_password_expires_at > NOW()
@@ -223,6 +243,7 @@ func (s *UserStore) GetUserByResetToken(ctx context.Context, token string) (*dom
 		&user.ProfilePicture,
 		&user.LastLoginAt,
 		&user.IsActive,
+		&user.TwoFactorEnabled,
 	)
 	if err != nil {
 		return nil, err
@@ -248,13 +269,64 @@ func (s *UserStore) UpdateLastLoginAt(ctx context.Context, userID uuid.UUID) err
 	return err
 }
 
-func (s *UserStore) CreateSubscription(ctx context.Context, subscription *domain.AuthSubscription) error {
-	query := `INSERT INTO subscriptions (user_id, started_at)
-			  VALUES ($1, $2)`
+// Two Factor methods
+
+func (s *UserStore) GetUserTwoFactor(ctx context.Context, userID uuid.UUID) (*domain.UserTwoFactor, error) {
+	query := `SELECT user_id, encrypted_secret, backup_codes_count, code_hashes, enabled_at, created_at, updated_at
+			  FROM user_two_factor WHERE user_id = $1`
+
+	twoFactor := &domain.UserTwoFactor{}
+	err := s.db.Pool().QueryRow(ctx, query, userID).Scan(
+		&twoFactor.UserID,
+		&twoFactor.EncryptedSecret,
+		&twoFactor.BackupCodesCount,
+		&twoFactor.CodeHashes,
+		&twoFactor.EnabledAt,
+		&twoFactor.CreatedAt,
+		&twoFactor.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return twoFactor, nil
+}
+
+func (s *UserStore) CreateUserTwoFactor(ctx context.Context, twoFactor *domain.UserTwoFactor) error {
+	query := `INSERT INTO user_two_factor (user_id, encrypted_secret, backup_codes_count, code_hashes, enabled_at)
+			  VALUES ($1, $2, $3, $4, $5)
+			  RETURNING created_at, updated_at`
+
+	err := s.db.Pool().QueryRow(ctx, query,
+		twoFactor.UserID,
+		twoFactor.EncryptedSecret,
+		twoFactor.BackupCodesCount,
+		twoFactor.CodeHashes,
+		twoFactor.EnabledAt,
+	).Scan(&twoFactor.CreatedAt, &twoFactor.UpdatedAt)
+
+	return err
+}
+
+func (s *UserStore) UpdateUserTwoFactor(ctx context.Context, twoFactor *domain.UserTwoFactor) error {
+	query := `UPDATE user_two_factor
+			  SET encrypted_secret = $2, backup_codes_count = $3, code_hashes = $4, enabled_at = $5, updated_at = NOW()
+			  WHERE user_id = $1`
 
 	_, err := s.db.Pool().Exec(ctx, query,
-		subscription.UserID,
-		time.Now(),
+		twoFactor.UserID,
+		twoFactor.EncryptedSecret,
+		twoFactor.BackupCodesCount,
+		twoFactor.CodeHashes,
+		twoFactor.EnabledAt,
 	)
+
+	return err
+}
+
+func (s *UserStore) DeleteUserTwoFactor(ctx context.Context, userID uuid.UUID) error {
+	query := `DELETE FROM user_two_factor WHERE user_id = $1`
+
+	_, err := s.db.Pool().Exec(ctx, query, userID)
 	return err
 }

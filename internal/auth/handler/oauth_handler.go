@@ -32,7 +32,7 @@ type OAuthHandler struct {
 }
 
 func NewOAuthHandler(u usecase.UserUsecase) *OAuthHandler {
-	return &OAuthHandler{
+	h := &OAuthHandler{
 		usecase: u,
 		config: &oauth2.Config{
 			Scopes: []string{
@@ -43,6 +43,11 @@ func NewOAuthHandler(u usecase.UserUsecase) *OAuthHandler {
 		},
 		cache: make(map[string]string),
 	}
+
+	// Start background cleanup routine
+	go h.startCleanupRoutine()
+
+	return h
 }
 
 func (h *OAuthHandler) Bind(e *echo.Group) {
@@ -101,19 +106,20 @@ func (h *OAuthHandler) GoogleCallback(c echo.Context) error {
 	token, err := config.Exchange(c.Request().Context(), code)
 	if err != nil {
 		logger.Error("Token exchange failed:", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Token exchange failed"})
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": "Failed to authenticate with Google"})
 	}
 
 	client := config.Client(c.Request().Context(), token)
 	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
 	if err != nil {
 		logger.Error("Failed to get user info:", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to get user info"})
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": "Failed to retrieve user information from Google"})
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Failed to get user info"})
+		logger.Error("Google API returned non-200 status:", resp.StatusCode)
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": "Failed to retrieve user information from Google"})
 	}
 
 	var googleUser struct {
@@ -127,7 +133,8 @@ func (h *OAuthHandler) GoogleCallback(c echo.Context) error {
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&googleUser); err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to decode user info"})
+		logger.Error("Failed to decode Google user info:", err)
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": "Failed to process user information from Google"})
 	}
 
 	if googleUser.GivenName == "" && googleUser.FamilyName == "" {
@@ -162,24 +169,28 @@ func (h *OAuthHandler) GoogleCallback(c echo.Context) error {
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrOAuthTokenInvalid):
-			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid token"})
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid OAuth token"})
 		case errors.Is(err, domain.ErrOAuthEmailRequired):
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Email required"})
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Email verification required from Google"})
+		case errors.Is(err, domain.ErrOAuthAccountLinkingRequired):
+			return c.JSON(http.StatusConflict, map[string]string{"error": "An account with this email already exists. Please login with your email and password to link your Google account in settings."})
 		default:
-			logger.Error("OAuth error:", err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "OAuth failed"})
+			logger.Error("Unexpected error in GoogleCallback:", err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
 		}
 	}
 
-	c.SetCookie(&http.Cookie{
-		Name:     "session_token",
-		Value:    output.Session.Token,
-		Expires:  time.Now().Add(domain.SessionDurationMinutes * time.Minute),
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteStrictMode,
-	})
+	if output.Session != nil && output.Session.Token != "" {
+		c.SetCookie(&http.Cookie{
+			Name:     "session_token",
+			Value:    output.Session.Token,
+			Expires:  time.Now().Add(domain.SessionDurationMinutes * time.Minute),
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteStrictMode,
+		})
+	}
 
 	return c.JSON(http.StatusOK, output)
 }
@@ -218,4 +229,31 @@ func (h *OAuthHandler) getRedirectURI() string {
 		return uri
 	}
 	return "http://localhost:8080/auth/google/callback"
+}
+
+func (h *OAuthHandler) startCleanupRoutine() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		h.cleanupExpiredStates()
+	}
+}
+
+func (h *OAuthHandler) cleanupExpiredStates() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	now := time.Now()
+	for state, timestampStr := range h.cache {
+		timestamp, err := time.Parse(time.RFC3339, timestampStr)
+		if err != nil {
+			delete(h.cache, state)
+			continue
+		}
+
+		if now.Sub(timestamp) > oauthStateExpiration {
+			delete(h.cache, state)
+		}
+	}
 }

@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/bluele/gcache"
@@ -68,7 +67,7 @@ func CookieSessionMiddleware() echo.MiddlewareFunc {
 					Value:    "",
 					Path:     "/",
 					HttpOnly: true,
-					Secure:   os.Getenv("APP_ENV") == "production",
+					Secure:   true,
 					SameSite: http.SameSiteStrictMode,
 					MaxAge:   -1,
 				}

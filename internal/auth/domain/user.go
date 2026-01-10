@@ -19,7 +19,6 @@ type UserAuth struct {
 	GoogleID         string
 	OAuthProvider    OAuthProvider
 	TwoFactorEnabled bool
-	TwoFactorSecret  *string
 }
 
 type AuthSubscription struct {
@@ -36,7 +35,7 @@ func (u *UserAuth) Validate() error {
 		return ErrInvalidUserEmailFormat
 	}
 
-	if u.PasswordHash == "" {
+	if u.OAuthProvider == AuthProviderEmail && u.PasswordHash == "" {
 		return ErrInvalidUserPassword
 	}
 

@@ -70,15 +70,10 @@ func (s *UserService) RegisterUser(ctx context.Context, input RegisterUserInput)
 		return RegisterUserOutput{}, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	go func() {
-		err := s.mailer.SendMail(createdUser.Email, "welcome-email", map[string]any{
-			"NAME": createdUser.FirstName + " " + createdUser.LastName,
-			"MAIL": createdUser.Email,
-		})
-		if err != nil {
-			logger.Error("Failed to send welcome email:", err)
-		}
-	}()
+	s.mailer.SendMailAsync(createdUser.Email, "welcome-email", map[string]any{
+		"NAME": createdUser.FirstName + " " + createdUser.LastName,
+		"MAIL": createdUser.Email,
+	}, "welcome-email")
 
 	return RegisterUserOutput{
 		ID:      createdUser.ID.String(),
@@ -125,11 +120,11 @@ func (s *UserService) LoginUser(ctx context.Context, input LoginUserInput, userA
 	if user.TwoFactorEnabled {
 		return LoginUserOutput{
 			User: UserInfo{
-				ID:    user.ID.String(),
-				Email: user.Email,
+				ID:               user.ID.String(),
+				Email:            user.Email,
+				TwoFactorEnabled: user.TwoFactorEnabled,
 			},
-			Message:           "Two-factor authentication required",
-			RequiresTwoFactor: true,
+			Message: "Two-factor authentication required",
 		}, nil
 	}
 
@@ -160,15 +155,15 @@ func (s *UserService) LoginUser(ctx context.Context, input LoginUserInput, userA
 
 	return LoginUserOutput{
 		User: UserInfo{
-			ID:    user.ID.String(),
-			Email: user.Email,
+			ID:               user.ID.String(),
+			Email:            user.Email,
+			TwoFactorEnabled: user.TwoFactorEnabled,
 		},
-		Session: SessionInfo{
+		Session: &SessionInfo{
 			Token:     session.SessionToken,
 			ExpiresAt: session.ExpiresAt.Format(time.RFC3339),
 		},
-		Message:           "Login successful",
-		RequiresTwoFactor: false,
+		Message: "Login successful",
 	}, nil
 }
 
@@ -183,7 +178,13 @@ func (s *UserService) VerifyTwoFactor(ctx context.Context, input VerifyTwoFactor
 		return VerifyTwoFactorOutput{}, domain.ErrTwoFactorNotEnabled
 	}
 
-	decryptedSecret, err := crypto.DecryptSecret(*user.TwoFactorSecret)
+	twoFactor, err := s.repo.GetUserTwoFactor(ctx, user.ID)
+	if err != nil {
+		logger.Error("Failed to get 2FA data:", err)
+		return VerifyTwoFactorOutput{}, domain.ErrTwoFactorNotEnabled
+	}
+
+	decryptedSecret, err := crypto.DecryptSecret(twoFactor.EncryptedSecret)
 	if err != nil {
 		logger.Error("Failed to decrypt 2FA secret:", err)
 		return VerifyTwoFactorOutput{}, domain.ErrInvalidTwoFactorCode
@@ -220,7 +221,7 @@ func (s *UserService) VerifyTwoFactor(ctx context.Context, input VerifyTwoFactor
 	}
 
 	return VerifyTwoFactorOutput{
-		Session: SessionInfo{
+		Session: &SessionInfo{
 			Token:     session.SessionToken,
 			ExpiresAt: session.ExpiresAt.Format(time.RFC3339),
 		},
@@ -250,6 +251,16 @@ func (s *UserService) ForgotPassword(ctx context.Context, input ForgotPasswordIn
 		return ForgotPasswordOutput{}, domain.ErrInvalidUserEmail
 	}
 
+	// Rate limiting for forgot password requests
+	cacheKey := "forgot_pwd:" + input.Email
+	attempts, err := s.cache.Get(cacheKey)
+	if err == nil {
+		if attempts.(int) >= domain.MaxForgotPasswordAttempts {
+			logger.Error("Rate limit exceeded for forgot password")
+			return ForgotPasswordOutput{}, domain.ErrTooManyForgotPasswordAttempts
+		}
+	}
+
 	user, err := s.repo.GetUserByEmail(ctx, input.Email)
 	if err != nil {
 		return ForgotPasswordOutput{
@@ -270,15 +281,19 @@ func (s *UserService) ForgotPassword(ctx context.Context, input ForgotPasswordIn
 		return ForgotPasswordOutput{}, fmt.Errorf("failed to set reset token: %w", err)
 	}
 
-	go func() {
-		resetLink := s.appUrl + "/reset-password?token=" + resetToken
-		err := s.mailer.SendMail(user.Email, "forgot-password", map[string]any{
-			"RESET_LINK": resetLink,
-		})
-		if err != nil {
-			logger.Error("Failed to send forgot password email:", err)
-		}
-	}()
+	// Increment forgot password attempts
+	currentAttempts := 1
+	if attempts != nil {
+		currentAttempts = attempts.(int) + 1
+	}
+	if err := s.cache.Set(cacheKey, currentAttempts); err != nil {
+		logger.Error("Cache error updating forgot password attempts")
+	}
+
+	resetLink := s.appUrl + "/reset-password?token=" + resetToken
+	s.mailer.SendMailAsync(user.Email, "forgot-password", map[string]any{
+		"RESET_LINK": resetLink,
+	}, "forgot-password")
 
 	return ForgotPasswordOutput{
 		Message: "If an account with this email exists, you will receive password reset instructions",
@@ -306,6 +321,11 @@ func (s *UserService) ResetPassword(ctx context.Context, input ResetPasswordInpu
 	if err != nil {
 		logger.Error("Failed to reset password:", err)
 		return ResetPasswordOutput{}, fmt.Errorf("failed to reset password: %w", err)
+	}
+
+	err = s.repo.DeleteAllSessionsByUserID(ctx, user.ID)
+	if err != nil {
+		logger.Error("Failed to invalidate sessions after password reset:", err)
 	}
 
 	return ResetPasswordOutput{
@@ -344,7 +364,7 @@ func (s *UserService) createSessionForExistingUser(ctx context.Context, user *do
 			ID:    user.ID.String(),
 			Email: user.Email,
 		},
-		Session: SessionInfo{
+		Session: &SessionInfo{
 			Token:     session.SessionToken,
 			ExpiresAt: session.ExpiresAt.Format(time.RFC3339),
 		},
@@ -362,15 +382,13 @@ func (s *UserService) LoginWithGoogleInfo(ctx context.Context, googleUser *Googl
 		return s.createSessionForExistingUser(ctx, user, userAgent, ipAddress)
 	}
 
-	user, err = s.repo.GetUserByEmail(ctx, googleUser.Email)
+	_, err = s.repo.GetUserByEmail(ctx, googleUser.Email)
 	if err == nil {
-		err = s.repo.UpdateGoogleOAuth(ctx, user.ID, googleUser.ID, domain.AuthProviderGoogle)
-		if err != nil {
-			logger.Error("Failed to link Google account:", err)
-			return GoogleAuthOutput{}, fmt.Errorf("failed to link Google account: %w", err)
-		}
-		logger.Info("Google account linked to existing user", "email", googleUser.Email)
-		return s.createSessionForExistingUser(ctx, user, userAgent, ipAddress)
+		// Account exists with this email but not linked to Google
+		// For security reasons, we don't auto-link accounts
+		// User should login with email/password first, then link Google in settings
+		logger.Info("User tried to login with Google but account exists with email/password", "email", googleUser.Email)
+		return GoogleAuthOutput{}, domain.ErrOAuthAccountLinkingRequired
 	}
 
 	newUser := &domain.UserAuth{

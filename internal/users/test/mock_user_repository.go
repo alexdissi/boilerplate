@@ -71,17 +71,17 @@ func (mr *MockUserRepositoryMockRecorder) DisableTwoFactor(ctx, userID any) *gom
 }
 
 // EnableTwoFactor mocks base method.
-func (m *MockUserRepository) EnableTwoFactor(ctx context.Context, userID uuid.UUID, secret string, recoveryCodes []string) error {
+func (m *MockUserRepository) EnableTwoFactor(ctx context.Context, userID uuid.UUID, secret string, codeHashes []string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EnableTwoFactor", ctx, userID, secret, recoveryCodes)
+	ret := m.ctrl.Call(m, "EnableTwoFactor", ctx, userID, secret, codeHashes)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // EnableTwoFactor indicates an expected call of EnableTwoFactor.
-func (mr *MockUserRepositoryMockRecorder) EnableTwoFactor(ctx, userID, secret, recoveryCodes any) *gomock.Call {
+func (mr *MockUserRepositoryMockRecorder) EnableTwoFactor(ctx, userID, secret, codeHashes any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnableTwoFactor", reflect.TypeOf((*MockUserRepository)(nil).EnableTwoFactor), ctx, userID, secret, recoveryCodes)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnableTwoFactor", reflect.TypeOf((*MockUserRepository)(nil).EnableTwoFactor), ctx, userID, secret, codeHashes)
 }
 
 // GetPublicProfileByID mocks base method.
@@ -97,6 +97,21 @@ func (m *MockUserRepository) GetPublicProfileByID(ctx context.Context, userID uu
 func (mr *MockUserRepositoryMockRecorder) GetPublicProfileByID(ctx, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPublicProfileByID", reflect.TypeOf((*MockUserRepository)(nil).GetPublicProfileByID), ctx, userID)
+}
+
+// GetUserTwoFactorSecret mocks base method.
+func (m *MockUserRepository) GetUserTwoFactorSecret(ctx context.Context, userID uuid.UUID) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUserTwoFactorSecret", ctx, userID)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetUserTwoFactorSecret indicates an expected call of GetUserTwoFactorSecret.
+func (mr *MockUserRepositoryMockRecorder) GetUserTwoFactorSecret(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserTwoFactorSecret", reflect.TypeOf((*MockUserRepository)(nil).GetUserTwoFactorSecret), ctx, userID)
 }
 
 // UpdateAvatar mocks base method.

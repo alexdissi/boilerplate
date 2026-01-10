@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base32"
 	"encoding/base64"
 	"errors"
@@ -291,12 +292,20 @@ func (u *userUsecase) EnableTwoFactor(ctx context.Context, userID string, req En
 	if !valid {
 		return EnableTwoFactorResponse{}, domain.ErrInvalidTwoFactorCode
 	}
+
 	recoveryCodes, err := generateRecoveryCodes()
 	if err != nil {
 		logger.Error("failed to generate recovery codes", err)
 		return EnableTwoFactorResponse{}, domain.ErrFailedToGenerateRecoveryCodes
 	}
-	err = u.userRepo.EnableTwoFactor(ctx, userUUID, req.Secret, recoveryCodes)
+
+	codeHashes := make([]string, len(recoveryCodes))
+	for i, code := range recoveryCodes {
+		hashedCode := fmt.Sprintf("%x", sha256.Sum256([]byte(code+userUUID.String())))
+		codeHashes[i] = hashedCode
+	}
+
+	err = u.userRepo.EnableTwoFactor(ctx, userUUID, req.Secret, codeHashes)
 	if err != nil {
 		logger.Error("failed to enable two factor", err)
 		return EnableTwoFactorResponse{}, domain.ErrFailedToEnableTwoFactor
@@ -323,11 +332,14 @@ func (u *userUsecase) DisableTwoFactor(ctx context.Context, userID string, req D
 		return domain.ErrTwoFactorNotEnabled
 	}
 
-	if user.TwoFactorSecret == nil {
+	// Get encrypted secret from user_two_factor table
+	encryptedSecret, err := u.userRepo.GetUserTwoFactorSecret(ctx, userUUID)
+	if err != nil {
+		logger.Error("failed to get 2FA secret", err)
 		return domain.ErrTwoFactorNotEnabled
 	}
 
-	decryptedSecret, err := crypto.DecryptSecret(*user.TwoFactorSecret)
+	decryptedSecret, err := crypto.DecryptSecret(encryptedSecret)
 	if err != nil {
 		logger.Error("failed to decrypt secret", err)
 		return domain.ErrInvalidTwoFactorCode

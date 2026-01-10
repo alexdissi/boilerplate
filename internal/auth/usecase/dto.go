@@ -19,19 +19,19 @@ type LoginUserInput struct {
 }
 
 type LoginUserOutput struct {
-	User              UserInfo    `json:"user"`
-	Session           SessionInfo `json:"session,omitempty"`
-	Message           string      `json:"message"`
-	RequiresTwoFactor bool        `json:"requiresTwoFactor"`
+	User    UserInfo     `json:"user"`
+	Session *SessionInfo `json:"-"`
+	Message string       `json:"message"`
 }
 
 type UserInfo struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
+	ID               string `json:"id"`
+	Email            string `json:"email"`
+	TwoFactorEnabled bool   `json:"twoFactorEnabled"`
 }
 
 type SessionInfo struct {
-	Token     string `json:"token,omitempty"`
+	Token     string `json:"-"`
 	ExpiresAt string `json:"expiresAt,omitempty"`
 }
 
@@ -62,6 +62,6 @@ type VerifyTwoFactorInput struct {
 }
 
 type VerifyTwoFactorOutput struct {
-	Session SessionInfo `json:"session"`
-	Message string      `json:"message"`
+	Session *SessionInfo `json:"-"`
+	Message string       `json:"message"`
 }
