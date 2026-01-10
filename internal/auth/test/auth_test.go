@@ -52,6 +52,11 @@ func (m *mockMailer) SendMail(to string, id string, data map[string]any) error {
 	return nil
 }
 
+func (m *mockMailer) SendMailAsync(to string, id string, data map[string]any, operationName string) {
+	// In tests, we execute synchronously to avoid race conditions
+	_ = m.SendMail(to, id, data)
+}
+
 func TestRegisterUser_Success(t *testing.T) {
 	mockRepo, service := setupService(t)
 	defer mockRepo.ctrl.Finish()
@@ -460,6 +465,10 @@ func TestResetPassword_Success(t *testing.T) {
 		ResetPassword(ctx, userID, gomock.Any()).
 		Return(nil)
 
+	mockRepo.EXPECT().
+		DeleteAllSessionsByUserID(ctx, userID).
+		Return(nil)
+
 	result, err := service.ResetPassword(ctx, input)
 
 	require.NoError(t, err)
@@ -502,4 +511,199 @@ func TestResetPassword_TokenNotFound(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, domain.ErrInvalidCredentials, err)
 	assert.Empty(t, result.Message)
+}
+
+// OAuth Tests
+
+func TestLoginWithGoogleInfo_NewUser(t *testing.T) {
+	mockRepo, service := setupService(t)
+	defer mockRepo.ctrl.Finish()
+
+	ctx := context.Background()
+	userAgent := "Mozilla/5.0"
+	ipAddress := "192.168.1.1"
+
+	googleUser := &usecase.GoogleUserInfo{
+		ID:            "google123",
+		Email:         "john.doe@gmail.com",
+		EmailVerified: true,
+		FirstName:     "John",
+		LastName:      "Doe",
+		Picture:       "https://example.com/photo.jpg",
+	}
+
+	mockRepo.EXPECT().
+		GetUserByGoogleID(ctx, googleUser.ID).
+		Return(nil, domain.ErrUserNotFound)
+
+	mockRepo.EXPECT().
+		GetUserByEmail(ctx, googleUser.Email).
+		Return(nil, domain.ErrUserNotFound)
+
+	mockRepo.EXPECT().
+		CreateUser(ctx, gomock.Any()).
+		DoAndReturn(func(_ context.Context, user *domain.UserAuth) (*domain.UserAuth, error) {
+			user.ID = uuid.New()
+			return user, nil
+		})
+
+	mockRepo.EXPECT().
+		UpdateLastLoginAt(ctx, gomock.Any()).
+		Return(nil)
+
+	mockRepo.EXPECT().
+		CreateSession(ctx, gomock.Any()).
+		Return(nil)
+
+	result, err := service.LoginWithGoogleInfo(ctx, googleUser, userAgent, ipAddress)
+
+	require.NoError(t, err)
+	assert.NotEmpty(t, result.User.ID)
+	assert.Equal(t, googleUser.Email, result.User.Email)
+	assert.NotEmpty(t, result.Session.Token)
+}
+
+func TestLoginWithGoogleInfo_ExistingGoogleUser(t *testing.T) {
+	mockRepo, service := setupService(t)
+	defer mockRepo.ctrl.Finish()
+
+	ctx := context.Background()
+	userAgent := "Mozilla/5.0"
+	ipAddress := "192.168.1.1"
+
+	userID := uuid.New()
+	existingUser := &domain.UserAuth{
+		ID:            userID,
+		Email:         "john.doe@gmail.com",
+		GoogleID:      "google123",
+		FirstName:     "John",
+		LastName:      "Doe",
+		OAuthProvider: domain.AuthProviderGoogle,
+		IsActive:      true,
+	}
+
+	googleUser := &usecase.GoogleUserInfo{
+		ID:            "google123",
+		Email:         "john.doe@gmail.com",
+		EmailVerified: true,
+		FirstName:     "John",
+		LastName:      "Doe",
+	}
+
+	mockRepo.EXPECT().
+		GetUserByGoogleID(ctx, googleUser.ID).
+		Return(existingUser, nil)
+
+	mockRepo.EXPECT().
+		UpdateLastLoginAt(ctx, userID).
+		Return(nil)
+
+	mockRepo.EXPECT().
+		CreateSession(ctx, gomock.Any()).
+		Return(nil)
+
+	result, err := service.LoginWithGoogleInfo(ctx, googleUser, userAgent, ipAddress)
+
+	require.NoError(t, err)
+	assert.Equal(t, userID.String(), result.User.ID)
+	assert.Equal(t, googleUser.Email, result.User.Email)
+	assert.NotEmpty(t, result.Session.Token)
+}
+
+func TestLoginWithGoogleInfo_EmailNotVerified(t *testing.T) {
+	_, service := setupService(t)
+
+	ctx := context.Background()
+	userAgent := "Mozilla/5.0"
+	ipAddress := "192.168.1.1"
+
+	googleUser := &usecase.GoogleUserInfo{
+		ID:            "google123",
+		Email:         "john.doe@gmail.com",
+		EmailVerified: false,
+		FirstName:     "John",
+		LastName:      "Doe",
+	}
+
+	result, err := service.LoginWithGoogleInfo(ctx, googleUser, userAgent, ipAddress)
+
+	assert.Error(t, err)
+	assert.Equal(t, domain.ErrOAuthEmailRequired, err)
+	assert.Empty(t, result.User.ID)
+}
+
+func TestLoginWithGoogleInfo_AccountLinkingRequired(t *testing.T) {
+	mockRepo, service := setupService(t)
+	defer mockRepo.ctrl.Finish()
+
+	ctx := context.Background()
+	userAgent := "Mozilla/5.0"
+	ipAddress := "192.168.1.1"
+
+	userID := uuid.New()
+	existingUser := &domain.UserAuth{
+		ID:            userID,
+		Email:         "john.doe@gmail.com",
+		PasswordHash:  "hashedpassword",
+		FirstName:     "John",
+		LastName:      "Doe",
+		OAuthProvider: domain.AuthProviderEmail,
+		IsActive:      true,
+	}
+
+	googleUser := &usecase.GoogleUserInfo{
+		ID:            "google123",
+		Email:         "john.doe@gmail.com",
+		EmailVerified: true,
+		FirstName:     "John",
+		LastName:      "Doe",
+	}
+
+	mockRepo.EXPECT().
+		GetUserByGoogleID(ctx, googleUser.ID).
+		Return(nil, domain.ErrUserNotFound)
+
+	mockRepo.EXPECT().
+		GetUserByEmail(ctx, googleUser.Email).
+		Return(existingUser, nil)
+
+	result, err := service.LoginWithGoogleInfo(ctx, googleUser, userAgent, ipAddress)
+
+	assert.Error(t, err)
+	assert.Equal(t, domain.ErrOAuthAccountLinkingRequired, err)
+	assert.Empty(t, result.User.ID)
+}
+
+// Two-Factor Tests
+
+func TestVerifyTwoFactor_NotEnabled(t *testing.T) {
+	mockRepo, service := setupService(t)
+	defer mockRepo.ctrl.Finish()
+
+	ctx := context.Background()
+	userAgent := "Mozilla/5.0"
+	ipAddress := "192.168.1.1"
+
+	userID := uuid.New()
+	existingUser := &domain.UserAuth{
+		ID:               userID,
+		Email:            "john.doe@example.com",
+		TwoFactorEnabled: false,
+		IsActive:         true,
+	}
+
+	input := usecase.VerifyTwoFactorInput{
+		Email: "john.doe@example.com",
+		Code:  "123456",
+	}
+
+	mockRepo.EXPECT().
+		GetUserByEmail(ctx, input.Email).
+		Return(existingUser, nil)
+
+	result, err := service.VerifyTwoFactor(ctx, input, userAgent, ipAddress)
+
+	assert.Error(t, err)
+	assert.Equal(t, domain.ErrTwoFactorNotEnabled, err)
+	assert.Empty(t, result.Session.Token)
 }

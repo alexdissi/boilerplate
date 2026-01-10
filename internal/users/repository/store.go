@@ -24,9 +24,10 @@ func NewUserStore(db database.Service) UserRepository {
 
 func (s *UserStore) GetPublicProfileByID(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
 	query := `
-		SELECT id, email, first_name, last_name, profile_picture
-		FROM users
-		WHERE id = $1 AND is_active = true`
+		SELECT u.id, u.email, u.first_name, u.last_name, u.profile_picture, u.password_hash, u.last_login_at, u.is_active, u.deleted_at, COALESCE(utf.enabled, false) as two_factor_enabled
+		FROM users u
+		LEFT JOIN user_two_factor utf ON utf.user_id = u.id
+		WHERE u.id = $1 AND u.is_active = true`
 
 	profile := &domain.User{}
 	err := s.db.Pool().QueryRow(ctx, query, userID).Scan(
@@ -35,6 +36,11 @@ func (s *UserStore) GetPublicProfileByID(ctx context.Context, userID uuid.UUID) 
 		&profile.FirstName,
 		&profile.LastName,
 		&profile.ProfilePicture,
+		&profile.PasswordHash,
+		&profile.LastLoginAt,
+		&profile.IsActive,
+		&profile.DeletedAt,
+		&profile.TwoFactorEnabled,
 	)
 
 	if err != nil {
@@ -125,37 +131,43 @@ func (s *UserStore) UpdateAvatar(ctx context.Context, userID uuid.UUID, avatarUR
 	return nil
 }
 
-func (s *UserStore) EnableTwoFactor(ctx context.Context, userID uuid.UUID, secret string, recoveryCodes []string) error {
+func (s *UserStore) EnableTwoFactor(ctx context.Context, userID uuid.UUID, secret string, codeHashes []string) error {
 	encryptedSecret, err := crypto.EncryptSecret(secret)
 	if err != nil {
 		return err
 	}
 
-	query := `UPDATE users SET two_factor_enabled = true, two_factor_secret = $2, recovery_codes = $3, updated_at = NOW() WHERE id = $1`
+	query := `INSERT INTO user_two_factor (user_id, encrypted_secret, enabled, backup_codes_count, code_hashes, enabled_at)
+			  VALUES ($1, $2, $3, $4, $5, NOW())
+			  ON CONFLICT (user_id) DO UPDATE SET
+			  encrypted_secret = EXCLUDED.encrypted_secret,
+			  enabled = EXCLUDED.enabled,
+			  backup_codes_count = EXCLUDED.backup_codes_count,
+			  code_hashes = EXCLUDED.code_hashes,
+			  enabled_at = EXCLUDED.enabled_at,
+			  updated_at = NOW()`
 
-	commandTag, err := s.db.Pool().Exec(ctx, query, userID, encryptedSecret, recoveryCodes)
-	if err != nil {
-		return err
-	}
-
-	if commandTag.RowsAffected() == 0 {
-		return domain.ErrUserNotFound
-	}
-
-	return nil
+	_, err = s.db.Pool().Exec(ctx, query, userID, encryptedSecret, true, len(codeHashes), codeHashes)
+	return err
 }
 
 func (s *UserStore) DisableTwoFactor(ctx context.Context, userID uuid.UUID) error {
-	query := `UPDATE users SET two_factor_enabled = false, two_factor_secret = NULL, recovery_codes = NULL, updated_at = NOW() WHERE id = $1`
+	query := `DELETE FROM user_two_factor WHERE user_id = $1`
+	_, err := s.db.Pool().Exec(ctx, query, userID)
+	return err
+}
 
-	commandTag, err := s.db.Pool().Exec(ctx, query, userID)
+func (s *UserStore) GetUserTwoFactorSecret(ctx context.Context, userID uuid.UUID) (string, error) {
+	query := `SELECT encrypted_secret FROM user_two_factor WHERE user_id = $1 AND enabled = true`
+
+	var encryptedSecret string
+	err := s.db.Pool().QueryRow(ctx, query, userID).Scan(&encryptedSecret)
 	if err != nil {
-		return err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", domain.ErrTwoFactorNotEnabled
+		}
+		return "", err
 	}
 
-	if commandTag.RowsAffected() == 0 {
-		return domain.ErrUserNotFound
-	}
-
-	return nil
+	return encryptedSecret, nil
 }

@@ -1,6 +1,8 @@
 package mailer
 
 import (
+	"my_project/pkg/logger"
+
 	"github.com/resend/resend-go/v3"
 )
 
@@ -26,4 +28,19 @@ func (r *resendMailer) SendMail(to string, id string, data map[string]any) error
 
 	_, err := r.client.Emails.Send(params)
 	return err
+}
+
+func (r *resendMailer) SendMailAsync(to string, id string, data map[string]any, operationName string) {
+	go func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				logger.Error("Panic in email goroutine", "operation", operationName, "panic", rec)
+			}
+		}()
+
+		err := r.SendMail(to, id, data)
+		if err != nil {
+			logger.Error("Failed to send email", "operation", operationName, "to", to, "template", id, "error", err)
+		}
+	}()
 }

@@ -176,7 +176,12 @@ func (h *AuthHandler) ForgotPasswordHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	output, err := h.usecase.ForgotPassword(ctx, req)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		switch {
+		case errors.Is(err, domain.ErrTooManyForgotPasswordAttempts):
+			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "Too many password reset requests, please try again later"})
+		default:
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		}
 	}
 
 	return c.JSON(http.StatusOK, output)

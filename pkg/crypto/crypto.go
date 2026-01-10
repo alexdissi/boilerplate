@@ -10,18 +10,32 @@ import (
 	"io"
 )
 
-var encryptionKey []byte
+var (
+	encryptionKey []byte
+	ErrKeyNotSet  = errors.New("encryption key not set")
+)
 
-func SetEncryptionKey(key string) {
+func SetEncryptionKey(key string) error {
 	if key == "" {
-		encryptionKey = nil
-		return
+		return errors.New("encryption key cannot be empty")
+	}
+	if len(key) < 32 {
+		return errors.New("encryption key must be at least 32 characters")
 	}
 	sum := sha256.Sum256([]byte(key))
 	encryptionKey = sum[:]
+	return nil
+}
+
+func IsKeySet() bool {
+	return encryptionKey != nil
 }
 
 func EncryptSecret(plaintext string) (string, error) {
+	if encryptionKey == nil {
+		return "", ErrKeyNotSet
+	}
+
 	block, err := aes.NewCipher(encryptionKey)
 	if err != nil {
 		return "", err
@@ -42,6 +56,10 @@ func EncryptSecret(plaintext string) (string, error) {
 }
 
 func DecryptSecret(ciphertext string) (string, error) {
+	if encryptionKey == nil {
+		return "", ErrKeyNotSet
+	}
+
 	data, err := base64.StdEncoding.DecodeString(ciphertext)
 	if err != nil {
 		return "", err

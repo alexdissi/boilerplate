@@ -32,7 +32,7 @@ type OAuthHandler struct {
 }
 
 func NewOAuthHandler(u usecase.UserUsecase) *OAuthHandler {
-	return &OAuthHandler{
+	h := &OAuthHandler{
 		usecase: u,
 		config: &oauth2.Config{
 			Scopes: []string{
@@ -43,6 +43,11 @@ func NewOAuthHandler(u usecase.UserUsecase) *OAuthHandler {
 		},
 		cache: make(map[string]string),
 	}
+
+	// Start background cleanup routine
+	go h.startCleanupRoutine()
+
+	return h
 }
 
 func (h *OAuthHandler) Bind(e *echo.Group) {
@@ -165,6 +170,10 @@ func (h *OAuthHandler) GoogleCallback(c echo.Context) error {
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid token"})
 		case errors.Is(err, domain.ErrOAuthEmailRequired):
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Email required"})
+		case errors.Is(err, domain.ErrOAuthAccountLinkingRequired):
+			return c.JSON(http.StatusConflict, map[string]string{
+				"error": "An account with this email already exists. Please login with your email and password to link your Google account in settings.",
+			})
 		default:
 			logger.Error("OAuth error:", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "OAuth failed"})
@@ -218,4 +227,31 @@ func (h *OAuthHandler) getRedirectURI() string {
 		return uri
 	}
 	return "http://localhost:8080/auth/google/callback"
+}
+
+func (h *OAuthHandler) startCleanupRoutine() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		h.cleanupExpiredStates()
+	}
+}
+
+func (h *OAuthHandler) cleanupExpiredStates() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	now := time.Now()
+	for state, timestampStr := range h.cache {
+		timestamp, err := time.Parse(time.RFC3339, timestampStr)
+		if err != nil {
+			delete(h.cache, state)
+			continue
+		}
+
+		if now.Sub(timestamp) > oauthStateExpiration {
+			delete(h.cache, state)
+		}
+	}
 }

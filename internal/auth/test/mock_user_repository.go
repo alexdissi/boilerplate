@@ -86,6 +86,49 @@ func (mr *MockUserRepositoryMockRecorder) CreateUser(ctx, user any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateUser", reflect.TypeOf((*MockUserRepository)(nil).CreateUser), ctx, user)
 }
 
+// CreateUserTwoFactor mocks base method.
+func (m *MockUserRepository) CreateUserTwoFactor(ctx context.Context, twoFactor *domain.UserTwoFactor) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateUserTwoFactor", ctx, twoFactor)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateUserTwoFactor indicates an expected call of CreateUserTwoFactor.
+func (mr *MockUserRepositoryMockRecorder) CreateUserTwoFactor(ctx, twoFactor any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateUserTwoFactor", reflect.TypeOf((*MockUserRepository)(nil).CreateUserTwoFactor), ctx, twoFactor)
+}
+
+// DeleteAllSessionsByUserID mocks base method.
+func (m *MockUserRepository) DeleteAllSessionsByUserID(ctx context.Context, userID uuid.UUID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteAllSessionsByUserID", ctx, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteAllSessionsByUserID indicates an expected call of DeleteAllSessionsByUserID.
+func (mr *MockUserRepositoryMockRecorder) DeleteAllSessionsByUserID(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteAllSessionsByUserID", reflect.TypeOf((*MockUserRepository)(nil).DeleteAllSessionsByUserID), ctx, userID)
+}
+
+// DeleteExpiredSessions mocks base method.
+func (m *MockUserRepository) DeleteExpiredSessions(ctx context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteExpiredSessions", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteExpiredSessions indicates an expected call of DeleteExpiredSessions.
+func (mr *MockUserRepositoryMockRecorder) DeleteExpiredSessions(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteExpiredSessions", reflect.TypeOf((*MockUserRepository)(nil).DeleteExpiredSessions), ctx)
+}
+
 // DeleteSessionByToken mocks base method.
 func (m *MockUserRepository) DeleteSessionByToken(ctx context.Context, token string) error {
 	m.ctrl.T.Helper()
@@ -98,6 +141,20 @@ func (m *MockUserRepository) DeleteSessionByToken(ctx context.Context, token str
 func (mr *MockUserRepositoryMockRecorder) DeleteSessionByToken(ctx, token any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSessionByToken", reflect.TypeOf((*MockUserRepository)(nil).DeleteSessionByToken), ctx, token)
+}
+
+// DeleteUserTwoFactor mocks base method.
+func (m *MockUserRepository) DeleteUserTwoFactor(ctx context.Context, userID uuid.UUID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteUserTwoFactor", ctx, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteUserTwoFactor indicates an expected call of DeleteUserTwoFactor.
+func (mr *MockUserRepositoryMockRecorder) DeleteUserTwoFactor(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteUserTwoFactor", reflect.TypeOf((*MockUserRepository)(nil).DeleteUserTwoFactor), ctx, userID)
 }
 
 // GetSessionByToken mocks base method.
@@ -175,6 +232,21 @@ func (mr *MockUserRepositoryMockRecorder) GetUserByResetToken(ctx, token any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserByResetToken", reflect.TypeOf((*MockUserRepository)(nil).GetUserByResetToken), ctx, token)
 }
 
+// GetUserTwoFactor mocks base method.
+func (m *MockUserRepository) GetUserTwoFactor(ctx context.Context, userID uuid.UUID) (*domain.UserTwoFactor, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUserTwoFactor", ctx, userID)
+	ret0, _ := ret[0].(*domain.UserTwoFactor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetUserTwoFactor indicates an expected call of GetUserTwoFactor.
+func (mr *MockUserRepositoryMockRecorder) GetUserTwoFactor(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserTwoFactor", reflect.TypeOf((*MockUserRepository)(nil).GetUserTwoFactor), ctx, userID)
+}
+
 // ResetPassword mocks base method.
 func (m *MockUserRepository) ResetPassword(ctx context.Context, userID uuid.UUID, newPasswordHash string) error {
 	m.ctrl.T.Helper()
@@ -229,6 +301,20 @@ func (m *MockUserRepository) UpdateLastLoginAt(ctx context.Context, userID uuid.
 func (mr *MockUserRepositoryMockRecorder) UpdateLastLoginAt(ctx, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLastLoginAt", reflect.TypeOf((*MockUserRepository)(nil).UpdateLastLoginAt), ctx, userID)
+}
+
+// UpdateUserTwoFactor mocks base method.
+func (m *MockUserRepository) UpdateUserTwoFactor(ctx context.Context, twoFactor *domain.UserTwoFactor) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateUserTwoFactor", ctx, twoFactor)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateUserTwoFactor indicates an expected call of UpdateUserTwoFactor.
+func (mr *MockUserRepositoryMockRecorder) UpdateUserTwoFactor(ctx, twoFactor any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUserTwoFactor", reflect.TypeOf((*MockUserRepository)(nil).UpdateUserTwoFactor), ctx, twoFactor)
 }
 
 // UserExistsByEmail mocks base method.

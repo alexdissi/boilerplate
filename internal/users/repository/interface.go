@@ -15,6 +15,7 @@ type UserRepository interface {
 	UpdatePassword(ctx context.Context, userID uuid.UUID, passwordHash string) error
 	DeleteUser(ctx context.Context, userID uuid.UUID) error
 	UpdateAvatar(ctx context.Context, userID uuid.UUID, avatarURL string) error
-	EnableTwoFactor(ctx context.Context, userID uuid.UUID, secret string, recoveryCodes []string) error
+	EnableTwoFactor(ctx context.Context, userID uuid.UUID, secret string, codeHashes []string) error
 	DisableTwoFactor(ctx context.Context, userID uuid.UUID) error
+	GetUserTwoFactorSecret(ctx context.Context, userID uuid.UUID) (string, error)
 }
