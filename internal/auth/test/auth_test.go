@@ -3,14 +3,17 @@ package test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"my_project/internal/auth/domain"
 	"my_project/internal/auth/usecase"
+	"my_project/pkg/crypto"
 	"my_project/pkg/logger"
 	"my_project/pkg/mailer"
 	"my_project/pkg/password"
 
 	"github.com/google/uuid"
+	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -18,6 +21,10 @@ import (
 
 func init() {
 	logger.Init()
+	err := crypto.SetEncryptionKey("test-encryption-key-for-testing-32-chars!!")
+	if err != nil {
+		panic(err)
+	}
 }
 
 func setupService(t *testing.T) (*MockUserRepository, usecase.UserUsecase) {
@@ -56,6 +63,10 @@ func (m *mockMailer) SendMailAsync(to string, id string, data map[string]any, op
 	// In tests, we execute synchronously to avoid race conditions
 	_ = m.SendMail(to, id, data)
 }
+
+// ============================================================================
+// REGISTER TESTS
+// ============================================================================
 
 func TestRegisterUser_Success(t *testing.T) {
 	mockRepo, service := setupService(t)
@@ -136,7 +147,9 @@ func TestRegisterUser_InvalidEmail(t *testing.T) {
 	assert.Empty(t, result.ID)
 }
 
-// Login Tests
+// ============================================================================
+// LOGIN TESTS
+// ============================================================================
 
 func TestLoginUser_Success(t *testing.T) {
 	mockRepo, service := setupService(t)
@@ -189,8 +202,53 @@ func TestLoginUser_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, existingUser.ID.String(), result.User.ID)
 	assert.Equal(t, existingUser.Email, result.User.Email)
+	assert.False(t, result.User.TwoFactorEnabled)
+	require.NotNil(t, result.Session, "Session should not be nil on successful login")
 	assert.NotEmpty(t, result.Session.Token)
+	assert.NotEmpty(t, result.Session.ExpiresAt)
 	assert.Equal(t, "Login successful", result.Message)
+}
+
+func TestLoginUser_With2FAEnabled(t *testing.T) {
+	mockRepo, service := setupService(t)
+	defer mockRepo.ctrl.Finish()
+
+	ctx := context.Background()
+	userAgent := "Mozilla/5.0"
+	ipAddress := "192.168.1.1"
+
+	userPassword := "Password123!"
+	hashedPassword, err := password.HashPassword(userPassword)
+	require.NoError(t, err)
+
+	userID := uuid.New()
+	existingUser := &domain.UserAuth{
+		ID:               userID,
+		Email:            "john.doe@example.com",
+		PasswordHash:     hashedPassword,
+		FirstName:        "John",
+		LastName:         "Doe",
+		IsActive:         true,
+		TwoFactorEnabled: true,
+	}
+
+	input := usecase.LoginUserInput{
+		Email:    "john.doe@example.com",
+		Password: userPassword,
+	}
+
+	mockRepo.EXPECT().
+		GetUserByEmail(ctx, input.Email).
+		Return(existingUser, nil)
+
+	result, err := service.LoginUser(ctx, input, userAgent, ipAddress)
+
+	require.NoError(t, err)
+	assert.Equal(t, existingUser.ID.String(), result.User.ID)
+	assert.Equal(t, existingUser.Email, result.User.Email)
+	assert.True(t, result.User.TwoFactorEnabled)
+	assert.Nil(t, result.Session, "Session should be nil when 2FA is required")
+	assert.Equal(t, "Two-factor authentication required", result.Message)
 }
 
 func TestLoginUser_InvalidCredentials(t *testing.T) {
@@ -230,7 +288,7 @@ func TestLoginUser_InvalidCredentials(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, domain.ErrInvalidCredentials, err)
 	assert.Empty(t, result.User.ID)
-	assert.Empty(t, result.Session.Token)
+	assert.Nil(t, result.Session)
 }
 
 func TestLoginUser_UserNotFound(t *testing.T) {
@@ -255,7 +313,7 @@ func TestLoginUser_UserNotFound(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, domain.ErrInvalidCredentials, err)
 	assert.Empty(t, result.User.ID)
-	assert.Empty(t, result.Session.Token)
+	assert.Nil(t, result.Session)
 }
 
 func TestLoginUser_RepositoryError(t *testing.T) {
@@ -280,7 +338,7 @@ func TestLoginUser_RepositoryError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, domain.ErrInvalidCredentials, err)
 	assert.Empty(t, result.User.ID)
-	assert.Empty(t, result.Session.Token)
+	assert.Nil(t, result.Session)
 }
 
 func TestLoginUser_CreateSessionError(t *testing.T) {
@@ -328,8 +386,190 @@ func TestLoginUser_CreateSessionError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to store session")
 	assert.Empty(t, result.User.ID)
-	assert.Empty(t, result.Session.Token)
+	assert.Nil(t, result.Session)
 }
+
+// ============================================================================
+// TWO-FACTOR AUTHENTICATION TESTS
+// ============================================================================
+
+func TestVerifyTwoFactor_Success(t *testing.T) {
+	mockRepo, service := setupService(t)
+	defer mockRepo.ctrl.Finish()
+
+	ctx := context.Background()
+	userAgent := "Mozilla/5.0"
+	ipAddress := "192.168.1.1"
+
+	userID := uuid.New()
+
+	// Generate real TOTP secret and code
+	secret, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      "MyProject",
+		AccountName: "john.doe@example.com",
+	})
+	require.NoError(t, err)
+
+	code, err := totp.GenerateCode(secret.Secret(), time.Now())
+	require.NoError(t, err)
+
+	encryptedSecret, err := crypto.EncryptSecret(secret.Secret())
+	require.NoError(t, err)
+
+	existingUser := &domain.UserAuth{
+		ID:               userID,
+		Email:            "john.doe@example.com",
+		FirstName:        "John",
+		LastName:         "Doe",
+		TwoFactorEnabled: true,
+		IsActive:         true,
+	}
+
+	twoFactor := &domain.UserTwoFactor{
+		UserID:          userID,
+		EncryptedSecret: encryptedSecret,
+	}
+
+	input := usecase.VerifyTwoFactorInput{
+		Email: "john.doe@example.com",
+		Code:  code,
+	}
+
+	mockRepo.EXPECT().
+		GetUserByEmail(ctx, input.Email).
+		Return(existingUser, nil)
+
+	mockRepo.EXPECT().
+		GetUserTwoFactor(ctx, userID).
+		Return(twoFactor, nil)
+
+	mockRepo.EXPECT().
+		UpdateLastLoginAt(ctx, userID).
+		Return(nil)
+
+	mockRepo.EXPECT().
+		CreateSession(ctx, gomock.Any()).
+		Return(nil)
+
+	result, err := service.VerifyTwoFactor(ctx, input, userAgent, ipAddress)
+
+	require.NoError(t, err)
+	require.NotNil(t, result.Session, "Session should not be nil after successful 2FA verification")
+	assert.NotEmpty(t, result.Session.Token)
+	assert.NotEmpty(t, result.Session.ExpiresAt)
+	assert.Equal(t, "Two-factor verification successful", result.Message)
+}
+
+func TestVerifyTwoFactor_InvalidCode(t *testing.T) {
+	mockRepo, service := setupService(t)
+	defer mockRepo.ctrl.Finish()
+
+	ctx := context.Background()
+	userAgent := "Mozilla/5.0"
+	ipAddress := "192.168.1.1"
+
+	userID := uuid.New()
+
+	secret, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      "MyProject",
+		AccountName: "john.doe@example.com",
+	})
+	require.NoError(t, err)
+
+	encryptedSecret, err := crypto.EncryptSecret(secret.Secret())
+	require.NoError(t, err)
+
+	existingUser := &domain.UserAuth{
+		ID:               userID,
+		Email:            "john.doe@example.com",
+		TwoFactorEnabled: true,
+		IsActive:         true,
+	}
+
+	twoFactor := &domain.UserTwoFactor{
+		UserID:          userID,
+		EncryptedSecret: encryptedSecret,
+	}
+
+	input := usecase.VerifyTwoFactorInput{
+		Email: "john.doe@example.com",
+		Code:  "000000", // Invalid code
+	}
+
+	mockRepo.EXPECT().
+		GetUserByEmail(ctx, input.Email).
+		Return(existingUser, nil)
+
+	mockRepo.EXPECT().
+		GetUserTwoFactor(ctx, userID).
+		Return(twoFactor, nil)
+
+	result, err := service.VerifyTwoFactor(ctx, input, userAgent, ipAddress)
+
+	assert.Error(t, err)
+	assert.Equal(t, domain.ErrInvalidTwoFactorCode, err)
+	assert.Nil(t, result.Session)
+}
+
+func TestVerifyTwoFactor_NotEnabled(t *testing.T) {
+	mockRepo, service := setupService(t)
+	defer mockRepo.ctrl.Finish()
+
+	ctx := context.Background()
+	userAgent := "Mozilla/5.0"
+	ipAddress := "192.168.1.1"
+
+	userID := uuid.New()
+	existingUser := &domain.UserAuth{
+		ID:               userID,
+		Email:            "john.doe@example.com",
+		TwoFactorEnabled: false,
+		IsActive:         true,
+	}
+
+	input := usecase.VerifyTwoFactorInput{
+		Email: "john.doe@example.com",
+		Code:  "123456",
+	}
+
+	mockRepo.EXPECT().
+		GetUserByEmail(ctx, input.Email).
+		Return(existingUser, nil)
+
+	result, err := service.VerifyTwoFactor(ctx, input, userAgent, ipAddress)
+
+	assert.Error(t, err)
+	assert.Equal(t, domain.ErrTwoFactorNotEnabled, err)
+	assert.Nil(t, result.Session)
+}
+
+func TestVerifyTwoFactor_UserNotFound(t *testing.T) {
+	mockRepo, service := setupService(t)
+	defer mockRepo.ctrl.Finish()
+
+	ctx := context.Background()
+	userAgent := "Mozilla/5.0"
+	ipAddress := "192.168.1.1"
+
+	input := usecase.VerifyTwoFactorInput{
+		Email: "nonexistent@example.com",
+		Code:  "123456",
+	}
+
+	mockRepo.EXPECT().
+		GetUserByEmail(ctx, input.Email).
+		Return(nil, domain.ErrUserNotFound)
+
+	result, err := service.VerifyTwoFactor(ctx, input, userAgent, ipAddress)
+
+	assert.Error(t, err)
+	assert.Equal(t, domain.ErrInvalidCredentials, err)
+	assert.Nil(t, result.Session)
+}
+
+// ============================================================================
+// LOGOUT TESTS
+// ============================================================================
 
 func TestLogoutUser_Success(t *testing.T) {
 	mockRepo, service := setupService(t)
@@ -346,6 +586,19 @@ func TestLogoutUser_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "Logged out successfully", result.Message)
+}
+
+func TestLogoutUser_EmptyToken(t *testing.T) {
+	_, service := setupService(t)
+
+	ctx := context.Background()
+	token := ""
+
+	result, err := service.LogoutUser(ctx, token)
+
+	assert.Error(t, err)
+	assert.Equal(t, domain.ErrInvalidCredentials, err)
+	assert.Empty(t, result.Message)
 }
 
 func TestLogoutUser_SessionNotFound(t *testing.T) {
@@ -365,6 +618,10 @@ func TestLogoutUser_SessionNotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to logout")
 	assert.Empty(t, result.Message)
 }
+
+// ============================================================================
+// FORGOT PASSWORD TESTS
+// ============================================================================
 
 func TestForgotPassword_Success(t *testing.T) {
 	mockRepo, service := setupService(t)
@@ -415,6 +672,7 @@ func TestForgotPassword_UserNotFound(t *testing.T) {
 
 	result, err := service.ForgotPassword(ctx, input)
 
+	// Should still return success to prevent email enumeration
 	require.NoError(t, err)
 	assert.Equal(t, "If an account with this email exists, you will receive password reset instructions", result.Message)
 }
@@ -434,7 +692,9 @@ func TestForgotPassword_InvalidEmail(t *testing.T) {
 	assert.Empty(t, result.Message)
 }
 
-// Reset Password Tests
+// ============================================================================
+// RESET PASSWORD TESTS
+// ============================================================================
 
 func TestResetPassword_Success(t *testing.T) {
 	mockRepo, service := setupService(t)
@@ -476,8 +736,7 @@ func TestResetPassword_Success(t *testing.T) {
 }
 
 func TestResetPassword_InvalidToken(t *testing.T) {
-	mockRepo, service := setupService(t)
-	defer mockRepo.ctrl.Finish()
+	_, service := setupService(t)
 
 	ctx := context.Background()
 	input := usecase.ResetPasswordInput{
@@ -513,7 +772,9 @@ func TestResetPassword_TokenNotFound(t *testing.T) {
 	assert.Empty(t, result.Message)
 }
 
-// OAuth Tests
+// ============================================================================
+// OAUTH / GOOGLE LOGIN TESTS
+// ============================================================================
 
 func TestLoginWithGoogleInfo_NewUser(t *testing.T) {
 	mockRepo, service := setupService(t)
@@ -544,6 +805,12 @@ func TestLoginWithGoogleInfo_NewUser(t *testing.T) {
 		CreateUser(ctx, gomock.Any()).
 		DoAndReturn(func(_ context.Context, user *domain.UserAuth) (*domain.UserAuth, error) {
 			user.ID = uuid.New()
+			assert.Equal(t, googleUser.Email, user.Email)
+			assert.Equal(t, googleUser.FirstName, user.FirstName)
+			assert.Equal(t, googleUser.LastName, user.LastName)
+			assert.Equal(t, googleUser.Picture, user.ProfilePicture)
+			assert.Equal(t, googleUser.ID, user.GoogleID)
+			assert.Equal(t, domain.AuthProviderGoogle, user.OAuthProvider)
 			return user, nil
 		})
 
@@ -560,6 +827,7 @@ func TestLoginWithGoogleInfo_NewUser(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, result.User.ID)
 	assert.Equal(t, googleUser.Email, result.User.Email)
+	require.NotNil(t, result.Session)
 	assert.NotEmpty(t, result.Session.Token)
 }
 
@@ -607,6 +875,7 @@ func TestLoginWithGoogleInfo_ExistingGoogleUser(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, userID.String(), result.User.ID)
 	assert.Equal(t, googleUser.Email, result.User.Email)
+	require.NotNil(t, result.Session)
 	assert.NotEmpty(t, result.Session.Token)
 }
 
@@ -672,38 +941,4 @@ func TestLoginWithGoogleInfo_AccountLinkingRequired(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, domain.ErrOAuthAccountLinkingRequired, err)
 	assert.Empty(t, result.User.ID)
-}
-
-// Two-Factor Tests
-
-func TestVerifyTwoFactor_NotEnabled(t *testing.T) {
-	mockRepo, service := setupService(t)
-	defer mockRepo.ctrl.Finish()
-
-	ctx := context.Background()
-	userAgent := "Mozilla/5.0"
-	ipAddress := "192.168.1.1"
-
-	userID := uuid.New()
-	existingUser := &domain.UserAuth{
-		ID:               userID,
-		Email:            "john.doe@example.com",
-		TwoFactorEnabled: false,
-		IsActive:         true,
-	}
-
-	input := usecase.VerifyTwoFactorInput{
-		Email: "john.doe@example.com",
-		Code:  "123456",
-	}
-
-	mockRepo.EXPECT().
-		GetUserByEmail(ctx, input.Email).
-		Return(existingUser, nil)
-
-	result, err := service.VerifyTwoFactor(ctx, input, userAgent, ipAddress)
-
-	assert.Error(t, err)
-	assert.Equal(t, domain.ErrTwoFactorNotEnabled, err)
-	assert.Empty(t, result.Session.Token)
 }
