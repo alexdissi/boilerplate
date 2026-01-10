@@ -185,10 +185,6 @@ func (s *UserService) VerifyTwoFactor(ctx context.Context, input VerifyTwoFactor
 		return VerifyTwoFactorOutput{}, domain.ErrTwoFactorNotEnabled
 	}
 
-	if !twoFactor.Enabled {
-		return VerifyTwoFactorOutput{}, domain.ErrTwoFactorNotEnabled
-	}
-
 	decryptedSecret, err := crypto.DecryptSecret(twoFactor.EncryptedSecret)
 	if err != nil {
 		logger.Error("Failed to decrypt 2FA secret:", err)

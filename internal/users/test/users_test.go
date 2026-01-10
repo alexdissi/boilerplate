@@ -12,15 +12,28 @@ import (
 	"my_project/internal/users/domain"
 	"my_project/internal/users/handler"
 	"my_project/internal/users/usecase"
+	passwordValidator "my_project/pkg/validator"
 	"my_project/pkg/logger"
 	"my_project/pkg/password"
 
 	"github.com/google/uuid"
+	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
+
+type CustomValidator struct {
+	validator *validator.Validate
+}
+
+func (cv *CustomValidator) Validate(i interface{}) error {
+	if err := cv.validator.Struct(i); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	return nil
+}
 
 func TestUpdateUserProfile_Usecase(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -105,6 +118,9 @@ func TestUpdateUserProfile_Handler(t *testing.T) {
 	userHandler := handler.NewUserHandler(mockUsecase)
 
 	e := echo.New()
+	v := validator.New()
+	passwordValidator.RegisterPasswordValidation(v)
+	e.Validator = &CustomValidator{validator: v}
 	userID := uuid.New().String()
 
 	t.Run("success", func(t *testing.T) {
@@ -147,13 +163,13 @@ func TestUpdateUserProfile_Handler(t *testing.T) {
 				name:          "invalid email",
 				reqBody:       map[string]string{"email": "invalid-email"},
 				expectedCode:  http.StatusBadRequest,
-				expectedError: "Validation failed",
+				expectedError: "Field validation for 'Email' failed",
 			},
 			{
 				name:          "first name too short",
 				reqBody:       map[string]string{"first_name": "a"},
 				expectedCode:  http.StatusBadRequest,
-				expectedError: "Validation failed",
+				expectedError: "Field validation for 'FirstName' failed",
 			},
 			{
 				name:          "no fields provided",
@@ -189,6 +205,15 @@ func TestUpdateUserProfile_Handler(t *testing.T) {
 				}
 
 				err := userHandler.UpdateUserProfile(c)
+				// Handle HTTPError from Echo's validator
+				if httpErr, ok := err.(*echo.HTTPError); ok {
+					assert.Equal(t, tt.expectedCode, httpErr.Code)
+					// Extract error message from HTTPError
+					if errMsg, ok := httpErr.Message.(string); ok {
+						assert.Contains(t, errMsg, tt.expectedError)
+					}
+					return
+				}
 				require.NoError(t, err)
 				assert.Equal(t, tt.expectedCode, rec.Code)
 
@@ -312,6 +337,9 @@ func TestChangePassword_Handler(t *testing.T) {
 	userHandler := handler.NewUserHandler(mockUsecase)
 
 	e := echo.New()
+	v := validator.New()
+	passwordValidator.RegisterPasswordValidation(v)
+	e.Validator = &CustomValidator{validator: v}
 	userID := uuid.New().String()
 
 	t.Run("success", func(t *testing.T) {
@@ -356,19 +384,19 @@ func TestChangePassword_Handler(t *testing.T) {
 				name:          "missing current password",
 				reqBody:       map[string]string{"new_password": "newPassword456!"},
 				expectedCode:  http.StatusBadRequest,
-				expectedError: "Validation failed",
+				expectedError: "Field validation for 'CurrentPassword' failed",
 			},
 			{
 				name:          "password too short",
 				reqBody:       map[string]string{"current_password": "old!", "new_password": "short"},
 				expectedCode:  http.StatusBadRequest,
-				expectedError: "Validation failed",
+				expectedError: "Field validation for 'NewPassword' failed",
 			},
 			{
 				name:          "weak password",
 				reqBody:       map[string]string{"current_password": "old!", "new_password": "weakpassword"},
 				expectedCode:  http.StatusBadRequest,
-				expectedError: "Validation failed",
+				expectedError: "Field validation for 'NewPassword' failed",
 			},
 			{
 				name:          "same password",
@@ -428,6 +456,15 @@ func TestChangePassword_Handler(t *testing.T) {
 				}
 
 				err := userHandler.ChangePassword(c)
+				// Handle HTTPError from Echo's validator
+				if httpErr, ok := err.(*echo.HTTPError); ok {
+					assert.Equal(t, tt.expectedCode, httpErr.Code)
+					// Extract error message from HTTPError
+					if errMsg, ok := httpErr.Message.(string); ok {
+						assert.Contains(t, errMsg, tt.expectedError)
+					}
+					return
+				}
 				require.NoError(t, err)
 				assert.Equal(t, tt.expectedCode, rec.Code)
 
@@ -477,6 +514,9 @@ func TestDeleteUser_Handler(t *testing.T) {
 	userHandler := handler.NewUserHandler(mockUsecase)
 
 	e := echo.New()
+	v := validator.New()
+	passwordValidator.RegisterPasswordValidation(v)
+	e.Validator = &CustomValidator{validator: v}
 	userID := uuid.New().String()
 
 	t.Run("success", func(t *testing.T) {

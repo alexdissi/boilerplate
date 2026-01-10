@@ -9,7 +9,6 @@ import (
 type UserTwoFactor struct {
 	UserID           uuid.UUID
 	EncryptedSecret  string
-	Enabled          bool
 	BackupCodesCount int
 	CodeHashes       []string
 	EnabledAt        *time.Time

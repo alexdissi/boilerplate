@@ -24,9 +24,8 @@ func NewUserStore(db database.Service) UserRepository {
 
 func (s *UserStore) GetPublicProfileByID(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
 	query := `
-		SELECT u.id, u.email, u.first_name, u.last_name, u.profile_picture, u.password_hash, u.last_login_at, u.is_active, u.deleted_at, COALESCE(utf.enabled, false) as two_factor_enabled
+		SELECT u.id, u.email, u.first_name, u.last_name, u.profile_picture, u.password_hash, u.last_login_at, u.is_active, u.deleted_at, u.two_factor_enabled
 		FROM users u
-		LEFT JOIN user_two_factor utf ON utf.user_id = u.id
 		WHERE u.id = $1 AND u.is_active = true`
 
 	profile := &domain.User{}
@@ -137,28 +136,62 @@ func (s *UserStore) EnableTwoFactor(ctx context.Context, userID uuid.UUID, secre
 		return err
 	}
 
-	query := `INSERT INTO user_two_factor (user_id, encrypted_secret, enabled, backup_codes_count, code_hashes, enabled_at)
-			  VALUES ($1, $2, $3, $4, $5, NOW())
+	tx, err := s.db.Pool().Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	query := `INSERT INTO user_two_factor (user_id, encrypted_secret, backup_codes_count, code_hashes, enabled_at)
+			  VALUES ($1, $2, $3, $4, NOW())
 			  ON CONFLICT (user_id) DO UPDATE SET
 			  encrypted_secret = EXCLUDED.encrypted_secret,
-			  enabled = EXCLUDED.enabled,
 			  backup_codes_count = EXCLUDED.backup_codes_count,
 			  code_hashes = EXCLUDED.code_hashes,
 			  enabled_at = EXCLUDED.enabled_at,
 			  updated_at = NOW()`
 
-	_, err = s.db.Pool().Exec(ctx, query, userID, encryptedSecret, true, len(codeHashes), codeHashes)
-	return err
+	_, err = tx.Exec(ctx, query, userID, encryptedSecret, len(codeHashes), codeHashes)
+	if err != nil {
+		return err
+	}
+
+	// Update users.two_factor_enabled flag
+	updateQuery := `UPDATE users SET two_factor_enabled = true, updated_at = NOW() WHERE id = $1`
+	_, err = tx.Exec(ctx, updateQuery, userID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (s *UserStore) DisableTwoFactor(ctx context.Context, userID uuid.UUID) error {
+	tx, err := s.db.Pool().Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// Delete from user_two_factor table
 	query := `DELETE FROM user_two_factor WHERE user_id = $1`
-	_, err := s.db.Pool().Exec(ctx, query, userID)
-	return err
+	_, err = tx.Exec(ctx, query, userID)
+	if err != nil {
+		return err
+	}
+
+	// Update users.two_factor_enabled flag
+	updateQuery := `UPDATE users SET two_factor_enabled = false, updated_at = NOW() WHERE id = $1`
+	_, err = tx.Exec(ctx, updateQuery, userID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (s *UserStore) GetUserTwoFactorSecret(ctx context.Context, userID uuid.UUID) (string, error) {
-	query := `SELECT encrypted_secret FROM user_two_factor WHERE user_id = $1 AND enabled = true`
+	query := `SELECT encrypted_secret FROM user_two_factor WHERE user_id = $1`
 
 	var encryptedSecret string
 	err := s.db.Pool().QueryRow(ctx, query, userID).Scan(&encryptedSecret)

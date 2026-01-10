@@ -18,6 +18,7 @@ CREATE TABLE
         is_active BOOLEAN DEFAULT TRUE,
         google_id TEXT UNIQUE,
         oauth_provider oauth_provider DEFAULT 'EMAIL',
+        two_factor_enabled BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMPTZ DEFAULT NOW (),
         updated_at TIMESTAMPTZ DEFAULT NOW (),
         deleted_at TIMESTAMPTZ
@@ -38,7 +39,6 @@ CREATE TABLE
     user_two_factor (
         user_id UUID PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE UNIQUE,
         encrypted_secret TEXT NOT NULL,
-        enabled BOOLEAN DEFAULT FALSE,
         backup_codes_count INTEGER DEFAULT 0,
         code_hashes TEXT[],
         enabled_at TIMESTAMPTZ,

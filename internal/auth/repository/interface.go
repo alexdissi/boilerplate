@@ -25,7 +25,6 @@ type UserRepository interface {
 	GetUserByResetToken(ctx context.Context, token string) (*domain.UserAuth, error)
 	ResetPassword(ctx context.Context, userID uuid.UUID, newPasswordHash string) error
 	UpdateLastLoginAt(ctx context.Context, userID uuid.UUID) error
-	CreateSubscription(ctx context.Context, subscription *domain.AuthSubscription) error
 
 	// Two Factor methods
 	GetUserTwoFactor(ctx context.Context, userID uuid.UUID) (*domain.UserTwoFactor, error)

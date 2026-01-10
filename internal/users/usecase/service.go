@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base32"
 	"encoding/base64"
 	"errors"
@@ -300,11 +301,7 @@ func (u *userUsecase) EnableTwoFactor(ctx context.Context, userID string, req En
 
 	codeHashes := make([]string, len(recoveryCodes))
 	for i, code := range recoveryCodes {
-		hashedCode, err := password.HashPassword(code)
-		if err != nil {
-			logger.Error("failed to hash recovery code", err)
-			return EnableTwoFactorResponse{}, domain.ErrFailedToGenerateRecoveryCodes
-		}
+		hashedCode := fmt.Sprintf("%x", sha256.Sum256([]byte(code+userUUID.String())))
 		codeHashes[i] = hashedCode
 	}
 
